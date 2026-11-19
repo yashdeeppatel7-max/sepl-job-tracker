@@ -21,11 +21,20 @@
       "package": "com.sepl.jobtracker"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "SEPL Job Tracker",
+      "shortName": "SEPL Jobs",
+      "themeColor": "#1F3A5F",
+      "backgroundColor": "#F3F5F8",
+      "display": "standalone",
+      "output": "single"
     },
     "plugins": [
       "expo-router"
     ],
-    "scheme": "sepltracker"
+    "scheme": "sepltracker",
+    "experiments": {
+      "baseUrl": "/sepl-job-tracker"
+    }
   }
 }

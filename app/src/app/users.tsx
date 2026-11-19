@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Button, Card, Chips, Empty, ErrorBox, Field, Loading, Muted, Pill, Screen, Section, Toggle } from '../components/ui';
 import { createUser, listProfiles, updateProfile, type ProfileRow } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ROLE_LABEL, ROLES, type Role } from '../lib/roles';
 import { useQuery } from '../lib/useQuery';
 import { colors } from '../theme';
+import { notify } from '../lib/notify';
 
 const roleOptions = ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }));
 
@@ -28,7 +29,7 @@ export default function Users() {
 function UserCard({ p, self, onChange }: { p: ProfileRow; self: boolean; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   async function save(patch: { role?: string | null; active?: boolean }) {
-    try { await updateProfile(p.id, patch); onChange(); } catch (e: any) { Alert.alert('Could not save', e.message); }
+    try { await updateProfile(p.id, patch); onChange(); } catch (e: any) { notify('Could not save', e.message); }
   }
   return (
     <Card onPress={() => setOpen(!open)}>
@@ -55,14 +56,14 @@ function AddUser({ onDone }: { onDone: () => void }) {
   const [role, setRole] = useState<Role>('production_manager');
   const [busy, setBusy] = useState(false);
   async function save() {
-    if (!name.trim() || !email.trim()) return Alert.alert('Enter name and email');
-    if (password.length < 8) return Alert.alert('Temporary password needs at least 8 characters');
+    if (!name.trim() || !email.trim()) return notify('Enter name and email');
+    if (password.length < 8) return notify('Temporary password needs at least 8 characters');
     setBusy(true);
     try {
       await createUser({ email: email.trim(), password, full_name: name.trim(), role });
-      Alert.alert('User added', `Share the email and temporary password with ${name}. They can change it under More → Change password.`);
+      notify('User added', `Share the email and temporary password with ${name}. They can change it under More → Change password.`);
       onDone();
-    } catch (e: any) { Alert.alert('Could not add user', e.message); } finally { setBusy(false); }
+    } catch (e: any) { notify('Could not add user', e.message); } finally { setBusy(false); }
   }
   return (
     <Card>

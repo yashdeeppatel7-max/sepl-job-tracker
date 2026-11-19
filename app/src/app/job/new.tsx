@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Button, Card, Chips, Field, Muted, Screen, Section, Toggle } from '../../components/ui';
 import { createJob, type JobStatus } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { parseNumber, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { colors } from '../../theme';
+import { notify } from '../../lib/notify';
 
 type ItemDraft = { description: string; item_code: string; qty: string; rate: string; gst: string };
 const blank = (): ItemDraft => ({ description: '', item_code: '', qty: '1', rate: '', gst: '18' });
@@ -25,14 +26,14 @@ export default function NewJob() {
   const setItem = (i: number, patch: Partial<ItemDraft>) => setItems(items.map((it, k) => (k === i ? { ...it, ...patch } : it)));
 
   async function save() {
-    if (!/^\d{2}-\d{3,5}$/.test(jobNo.trim())) return Alert.alert('Job no. should look like 26-1046');
-    if (!customer.trim()) return Alert.alert('Enter the customer');
+    if (!/^\d{2}-\d{3,5}$/.test(jobNo.trim())) return notify('Job no. should look like 26-1046');
+    if (!customer.trim()) return notify('Enter the customer');
     const pd = poDate.trim() ? parseUserDate(poDate) : null;
     const dd = delivery.trim() ? parseUserDate(delivery) : null;
-    if ((poDate.trim() && !pd) || (delivery.trim() && !dd)) return Alert.alert('Check the dates', 'Use the format 31.12.2026');
+    if ((poDate.trim() && !pd) || (delivery.trim() && !dd)) return notify('Check the dates', 'Use the format 31.12.2026');
     const clean = items.filter((it) => it.description.trim());
-    if (!clean.length) return Alert.alert('Add at least one item');
-    for (const it of clean) if (!parseNumber(it.qty)) return Alert.alert(`Check the quantity for "${it.description}"`);
+    if (!clean.length) return notify('Add at least one item');
+    for (const it of clean) if (!parseNumber(it.qty)) return notify(`Check the quantity for "${it.description}"`);
     setBusy(true);
     try {
       const id = await createJob({
@@ -44,7 +45,7 @@ export default function NewJob() {
       });
       router.replace(`/job/${id}`);
     } catch (e: any) {
-      Alert.alert('Could not save', e.message.includes('duplicate') ? `Job ${jobNo} already exists.` : e.message);
+      notify('Could not save', e.message.includes('duplicate') ? `Job ${jobNo} already exists.` : e.message);
     } finally { setBusy(false); }
   }
 

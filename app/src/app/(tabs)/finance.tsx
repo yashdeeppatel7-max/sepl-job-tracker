@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Card, Chips, Empty, ErrorBox, Loading, Muted, Pill } from '../../components/ui';
 import { listBills, listInvoices, markBillPaid, type InvoiceRow, type VendorBill } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, money, moneyShort } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors, space } from '../../theme';
+import { notify } from '../../lib/notify';
 
 type View_ = 'unpaid' | 'paid' | 'all' | 'bills';
 
@@ -100,7 +101,7 @@ function BillCard({ bill, onChange }: { bill: VendorBill; onChange: () => void }
       {bill.notes ? <Muted>{bill.notes}</Muted> : null}
       <View style={styles.head}>
         <Text style={{ color: colors.info, fontWeight: '600' }} onPress={async () => {
-          try { await markBillPaid(bill.id, !bill.paid); onChange(); } catch (e: any) { Alert.alert('Could not save', e.message); }
+          try { await markBillPaid(bill.id, !bill.paid); onChange(); } catch (e: any) { notify('Could not save', e.message); }
         }}>{bill.paid ? 'Mark unpaid' : 'Mark paid'}</Text>
         <Text style={styles.amount}>{money(bill.amount)}</Text>
       </View>

@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Text } from 'react-native';
 import { Button, Card, ErrorBox, Field, Loading, Muted, Screen, Section, Toggle } from '../../components/ui';
 import { createInvoice, getJob, getJobFinance } from '../../lib/api';
 import { money, parseNumber, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
+import { notify } from '../../lib/notify';
 
 export default function NewInvoice() {
   const { job: jobId } = useLocalSearchParams<{ job: string }>();
@@ -26,14 +27,14 @@ export default function NewInvoice() {
 
   async function save() {
     const d = parseUserDate(on);
-    if (!no.trim()) return Alert.alert('Enter the invoice number');
-    if (!d) return Alert.alert('Check the date', 'Use the format 31.12.2026');
+    if (!no.trim()) return notify('Enter the invoice number');
+    if (!d) return notify('Check the date', 'Use the format 31.12.2026');
     const a = amount == null || amount === '' ? suggested || null : parseNumber(amount);
     setBusy(true);
     try {
       await createInvoice(jobId, no, d, ids, a);
       router.back();
-    } catch (e: any) { Alert.alert('Could not save', e.message); } finally { setBusy(false); }
+    } catch (e: any) { notify('Could not save', e.message); } finally { setBusy(false); }
   }
 
   return (

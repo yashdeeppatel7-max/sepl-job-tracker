@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Text } from 'react-native';
 import { Button, Card, Chips, Field, Muted, Screen, Section, Toggle } from '../../components/ui';
 import { createDespatch, findJobByNo, getJob, getJobFinance, type InvoiceRow, type LineItem } from '../../lib/api';
 import { parseUserDate, todayIso, toUserDate } from '../../lib/format';
+import { notify } from '../../lib/notify';
 
 export default function NewDespatch() {
   const params = useLocalSearchParams<{ job?: string }>();
@@ -30,20 +31,20 @@ export default function NewDespatch() {
     setPicked(Object.fromEntries(its.filter((i) => !['despatched', 'documents_sent', 'payment_received'].includes(i.current_stage ?? '')).map((i) => [i.id, true])));
   }
 
-  useEffect(() => { if (params.job) loadJob(params.job).catch((e) => Alert.alert('Error', e.message)); }, [params.job]);
+  useEffect(() => { if (params.job) loadJob(params.job).catch((e) => notify('Error', e.message)); }, [params.job]);
 
   async function find() {
     try {
       const j = await findJobByNo(jobNo);
-      if (!j) return Alert.alert('Not found', `No job ${jobNo}`);
+      if (!j) return notify('Not found', `No job ${jobNo}`);
       await loadJob(j.id);
-    } catch (e: any) { Alert.alert('Error', e.message); }
+    } catch (e: any) { notify('Error', e.message); }
   }
 
   async function save() {
     if (!job) return;
     const d = parseUserDate(on);
-    if (!d) return Alert.alert('Check the date', 'Use the format 31.12.2026');
+    if (!d) return notify('Check the date', 'Use the format 31.12.2026');
     setBusy(true);
     try {
       await createDespatch({
@@ -51,7 +52,7 @@ export default function NewDespatch() {
         documents_sent: docs, notes, itemIds: Object.keys(picked).filter((k) => picked[k]),
       });
       router.back();
-    } catch (e: any) { Alert.alert('Could not save', e.message); } finally { setBusy(false); }
+    } catch (e: any) { notify('Could not save', e.message); } finally { setBusy(false); }
   }
 
   return (

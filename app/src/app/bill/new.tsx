@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert } from 'react-native';
 import { Button, Card, Field, Screen } from '../../components/ui';
 import { createBill } from '../../lib/api';
 import { parseNumber, parseUserDate, todayIso, toUserDate } from '../../lib/format';
+import { notify } from '../../lib/notify';
 
 export default function NewBill() {
   const [vendor, setVendor] = useState('');
@@ -17,14 +17,14 @@ export default function NewBill() {
   async function save() {
     const a = parseNumber(amount);
     const d = parseUserDate(on);
-    if (!vendor.trim() || !billNo.trim()) return Alert.alert('Enter vendor and bill no.');
-    if (a == null) return Alert.alert('Enter the bill amount');
-    if (!d) return Alert.alert('Check the date', 'Use the format 31.12.2026');
+    if (!vendor.trim() || !billNo.trim()) return notify('Enter vendor and bill no.');
+    if (a == null) return notify('Enter the bill amount');
+    if (!d) return notify('Check the date', 'Use the format 31.12.2026');
     setBusy(true);
     try {
       await createBill({ vendor, job_no: jobNo, bill_no: billNo, bill_date: d, amount: a, notes });
       router.back();
-    } catch (e: any) { Alert.alert('Could not save', e.message); } finally { setBusy(false); }
+    } catch (e: any) { notify('Could not save', e.message); } finally { setBusy(false); }
   }
 
   return (

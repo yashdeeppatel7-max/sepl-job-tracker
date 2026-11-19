@@ -1,7 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useState } from 'react';
-import { Alert, Platform, Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { Button, Card, Empty, ErrorBox, Muted, Pill, Row, Screen, Section } from '../components/ui';
 import { importRows } from '../lib/api';
 import { useAuth } from '../lib/auth';

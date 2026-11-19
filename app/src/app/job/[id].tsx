@@ -1,6 +1,6 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section, Title, Toggle } from '../../components/ui';
 import {
   getJob, getJobFinance, getStages, JOB_STATUS_LABEL, stageLabel, updateJob, type JobStatus,
@@ -9,6 +9,7 @@ import { useAuth } from '../../lib/auth';
 import { date, money, parseUserDate, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors } from '../../theme';
+import { notify } from '../../lib/notify';
 
 const EDITABLE_STATUS: { value: JobStatus; label: string }[] = [
   { value: 'enquiry', label: 'Enquiry' },
@@ -127,13 +128,13 @@ function EditJob({ job, onDone }: { job: Awaited<ReturnType<typeof getJob>>['job
 
   async function save() {
     const d = delivery.trim() ? parseUserDate(delivery) : null;
-    if (delivery.trim() && !d) return Alert.alert('Check the delivery date', 'Use the format 31.12.2026');
+    if (delivery.trim() && !d) return notify('Check the delivery date', 'Use the format 31.12.2026');
     setBusy(true);
     try {
       await updateJob(job.id, { status, tpi_required: tpi, tpi_agency: agency.trim() || null, qap_ref: qap.trim() || null, remarks: remarks.trim() || null, delivery_date: d });
       onDone();
     } catch (e: any) {
-      Alert.alert('Could not save', e.message);
+      notify('Could not save', e.message);
     } finally {
       setBusy(false);
     }

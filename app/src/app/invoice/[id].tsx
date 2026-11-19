@@ -1,11 +1,12 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Button, Card, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section } from '../../components/ui';
 import { addPayment, getInvoice, updateInvoice } from '../../lib/api';
 import { date, money, parseNumber, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors } from '../../theme';
+import { notify } from '../../lib/notify';
 
 export default function InvoiceDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,20 +25,20 @@ export default function InvoiceDetail() {
   async function pay() {
     const a = parseNumber(amount);
     const d = parseUserDate(on);
-    if (!a || a <= 0) return Alert.alert('Enter the amount received');
-    if (!d) return Alert.alert('Check the date', 'Use the format 31.12.2026');
+    if (!a || a <= 0) return notify('Enter the amount received');
+    if (!d) return notify('Check the date', 'Use the format 31.12.2026');
     setBusy(true);
     try {
       await addPayment(inv.id, a, d, ref);
       setAmount(''); setRef('');
       await reload();
-    } catch (e: any) { Alert.alert('Could not save', e.message); } finally { setBusy(false); }
+    } catch (e: any) { notify('Could not save', e.message); } finally { setBusy(false); }
   }
 
   async function saveAmount() {
     const a = parseNumber(invAmount ?? '');
-    if (a == null) return Alert.alert('Enter a number');
-    try { await updateInvoice(inv.id, { amount: a }); setInvAmount(null); reload(); } catch (e: any) { Alert.alert('Could not save', e.message); }
+    if (a == null) return notify('Enter a number');
+    try { await updateInvoice(inv.id, { amount: a }); setInvAmount(null); reload(); } catch (e: any) { notify('Could not save', e.message); }
   }
 
   return (

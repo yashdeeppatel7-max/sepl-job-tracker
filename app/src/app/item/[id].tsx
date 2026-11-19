@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Screen, Section, Toggle } from '../../components/ui';
 import { addStageEvent, getItem, getStages, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors, space } from '../../theme';
+import { notify } from '../../lib/notify';
 
 type Status = 'in_progress' | 'done' | 'skipped';
 type Mode = 'in_house' | 'job_work';
@@ -59,15 +60,15 @@ export default function ItemDetail() {
   async function save() {
     if (!selected) return;
     const d = parseUserDate(on);
-    if (!d) return Alert.alert('Check the date', 'Use the format 31.12.2026');
-    if (mode === 'job_work' && !vendor.trim()) return Alert.alert('Vendor needed', 'Enter the job-work vendor name.');
+    if (!d) return notify('Check the date', 'Use the format 31.12.2026');
+    if (mode === 'job_work' && !vendor.trim()) return notify('Vendor needed', 'Enter the job-work vendor name.');
     setBusy(true);
     try {
       await addStageEvent({ line_item_id: item.id, stage_code: selected, status, mode, vendor_name: vendor, note, happened_on: d });
       setStageCode(null); setNote(''); setVendor(''); setStatus('done'); setMode('in_house');
       await reload();
     } catch (e: any) {
-      Alert.alert('Could not save', e.message);
+      notify('Could not save', e.message);
     } finally {
       setBusy(false);
     }
@@ -86,7 +87,7 @@ export default function ItemDetail() {
         </View>
         {perms.updateProductionStages && (
           <Toggle label="Defects found, needs rectification" value={item.needs_rectification}
-            onChange={async (v) => { try { await setNeedsRectification(item.id, v); reload(); } catch (e: any) { Alert.alert('Could not save', e.message); } }} />
+            onChange={async (v) => { try { await setNeedsRectification(item.id, v); reload(); } catch (e: any) { notify('Could not save', e.message); } }} />
         )}
       </Card>
 
