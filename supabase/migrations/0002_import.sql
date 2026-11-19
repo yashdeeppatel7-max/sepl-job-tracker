@@ -101,8 +101,8 @@ begin
       end if;
     end loop;
 
-    -- "Complete" in the sheet = despatched
-    if v_status like '%complete%' and not exists
+    -- Invoiced, or "Complete"/"Done" in the sheet = despatched (invoice and despatch go together)
+    if (v_status ~ '(complete|done)' or jsonb_array_length(coalesce(r->'invoices','[]'::jsonb)) > 0) and not exists
          (select 1 from stage_events where line_item_id = v_item and stage_code = 'despatched') then
       insert into stage_events (line_item_id, stage_code, status, note, happened_on)
       values (v_item, 'despatched', 'done', 'From Excel import',

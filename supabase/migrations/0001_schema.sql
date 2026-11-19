@@ -39,14 +39,13 @@ language sql stable as $$ select coalesce(public.my_role() in ('director','ceo',
 create or replace function public.is_member() returns boolean
 language sql stable as $$ select public.my_role() is not null $$;
 
--- New sign-ups get a profile with no role; an owner assigns it.
+-- New accounts get a profile with NO role; only Director/CEO assign roles
+-- (user-editable sign-up metadata is never trusted for the role).
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  insert into profiles (id, full_name, role)
-  values (new.id,
-          coalesce(new.raw_user_meta_data->>'full_name', ''),
-          nullif(new.raw_user_meta_data->>'role', '')::app_role)
+  insert into profiles (id, full_name)
+  values (new.id, coalesce(new.raw_user_meta_data->>'full_name', ''))
   on conflict (id) do nothing;
   return new;
 end $$;

@@ -10,6 +10,10 @@ insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-000000000004','acc@x', '{"full_name":"Accounts","role":"accounts"}'),
   ('00000000-0000-0000-0000-000000000005','pm@x',  '{"full_name":"Production","role":"production_manager"}'),
   ('00000000-0000-0000-0000-000000000006','new@x', '{"full_name":"Nobody"}');
+update profiles set role = (select (raw_user_meta_data->>'role')::app_role from auth.users u where u.id = profiles.id);
+-- sign-up metadata must not grant a role by itself
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('00000000-0000-0000-0000-000000000007','sneaky@x', '{"full_name":"Sneaky","role":"director"}');
 
 create or replace function pg_temp.as_user(n int) returns void language plpgsql as $$
 begin
@@ -44,7 +48,7 @@ insert into pg_temp.results values ('re-import updates, no duplicates',
   and (select qty from line_items li join jobs j on j.id=li.job_id where job_no='25-1061') = 2);
 insert into pg_temp.results values ('import marked invoiced + despatched stages',
   (select current_stage from line_items where description='BOTTOM INTERMEDIATE SHAFT') = 'despatched'
-  and (select current_stage from line_items where description like 'STUB%') = 'invoiced');
+  and (select current_stage from line_items where description like 'STUB%') = 'despatched');
 
 -- ---------- Production manager ----------
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
@@ -112,6 +116,7 @@ reset role;
 
 -- ---------- No role / owners ----------
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000006'; set role authenticated;
+insert into pg_temp.results values ('Sign-up cannot self-assign a role', (select role from profiles where full_name='Sneaky') is null);
 insert into pg_temp.results values ('User without role sees nothing', (select count(*) from jobs) = 0 and (select count(*) from customers) = 0);
 reset role;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
