@@ -150,7 +150,7 @@ create table line_item_prices (
   gst_pct       numeric default 18,
   gst_value     numeric,
   total_value   numeric,          -- incl. GST
-  rate_notes    text              -- e.g. SEPL / Mehta rates from newer sheets
+  finance_notes text              -- sheet status / sale notes; may mention money, so finance-only
 );
 
 create table invoices (
