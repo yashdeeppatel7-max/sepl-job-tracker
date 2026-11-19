@@ -226,7 +226,7 @@ create table stage_events (
   vendor_id     uuid references vendors(id),
   note          text,
   happened_on   date not null default current_date,
-  created_by    uuid default auth.uid(),
+  created_by    uuid default auth.uid() references profiles(id) on delete set null,
   created_at    timestamptz not null default now()
 );
 

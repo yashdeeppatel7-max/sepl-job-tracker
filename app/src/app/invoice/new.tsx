@@ -1,0 +1,60 @@
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { Alert, Text } from 'react-native';
+import { Button, Card, ErrorBox, Field, Loading, Muted, Screen, Section, Toggle } from '../../components/ui';
+import { createInvoice, getJob, getJobFinance } from '../../lib/api';
+import { money, parseNumber, parseUserDate, todayIso, toUserDate } from '../../lib/format';
+import { useQuery } from '../../lib/useQuery';
+
+export default function NewInvoice() {
+  const { job: jobId } = useLocalSearchParams<{ job: string }>();
+  const { data, error } = useQuery(async () => {
+    const { job, items } = await getJob(jobId);
+    const fin = await getJobFinance(jobId, items.map((i) => i.id));
+    return { job, items, fin };
+  }, [jobId]);
+  const [no, setNo] = useState('');
+  const [on, setOn] = useState(toUserDate(todayIso()));
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [amount, setAmount] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (error) return <Screen><ErrorBox message={error} /></Screen>;
+  if (!data) return <Loading />;
+  const ids = Object.keys(picked).filter((k) => picked[k]);
+  const suggested = ids.reduce((s, id) => s + (data.fin.prices[id]?.total_value ?? 0), 0);
+
+  async function save() {
+    const d = parseUserDate(on);
+    if (!no.trim()) return Alert.alert('Enter the invoice number');
+    if (!d) return Alert.alert('Check the date', 'Use the format 31.12.2026');
+    const a = amount == null || amount === '' ? suggested || null : parseNumber(amount);
+    setBusy(true);
+    try {
+      await createInvoice(jobId, no, d, ids, a);
+      router.back();
+    } catch (e: any) { Alert.alert('Could not save', e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <Screen>
+      <Card>
+        <Text style={{ fontWeight: '700', fontSize: 16 }}>Job {data.job.job_no}  ·  {data.job.customers?.code}</Text>
+        <Field label="Invoice no." value={no} onChangeText={setNo} placeholder="26/071" autoCapitalize="characters" />
+        <Field label="Invoice date" value={on} onChangeText={setOn} placeholder="31.12.2026" />
+      </Card>
+      <Section title="Items on this invoice">
+        <Card>
+          {data.items.map((it) => (
+            <Toggle key={it.id} label={`${it.line_no}. ${it.description.slice(0, 60)} (qty ${it.qty})`} value={!!picked[it.id]} onChange={(v) => setPicked({ ...picked, [it.id]: v })} />
+          ))}
+        </Card>
+      </Section>
+      <Card>
+        <Field label="Amount incl. GST (₹)" value={amount ?? ''} onChangeText={setAmount} keyboardType="decimal-pad" placeholder={suggested ? String(Math.round(suggested)) : ''} hint={suggested ? `From item values: ${money(suggested)}` : undefined} />
+        <Muted>Selected items will move to "Invoice prepared".</Muted>
+        <Button title="Create invoice" onPress={save} busy={busy} />
+      </Card>
+    </Screen>
+  );
+}

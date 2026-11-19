@@ -1,9 +1,10 @@
 {
-  "name": "app",
+  "name": "po-tracker",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",
+    "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.119.1",
     "expo": "~58.0.26",
@@ -30,7 +31,9 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "parse-sheet": "node scripts/parse-sheet.ts"
   },
   "private": true
 }
