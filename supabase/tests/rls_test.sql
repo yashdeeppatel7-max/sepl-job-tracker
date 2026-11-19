@@ -1,0 +1,142 @@
+-- Role-rule tests. Run with supabase/tests/run.sh (plain Postgres + auth stub).
+\set ON_ERROR_STOP 1
+set client_min_messages = warning;
+
+-- users, one per role (the trigger creates profiles; owner sets roles)
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('00000000-0000-0000-0000-000000000001','dir@x', '{"full_name":"Director","role":"director"}'),
+  ('00000000-0000-0000-0000-000000000002','ceo@x', '{"full_name":"CEO","role":"ceo"}'),
+  ('00000000-0000-0000-0000-000000000003','adm@x', '{"full_name":"Admin","role":"admin"}'),
+  ('00000000-0000-0000-0000-000000000004','acc@x', '{"full_name":"Accounts","role":"accounts"}'),
+  ('00000000-0000-0000-0000-000000000005','pm@x',  '{"full_name":"Production","role":"production_manager"}'),
+  ('00000000-0000-0000-0000-000000000006','new@x', '{"full_name":"Nobody"}');
+
+create or replace function pg_temp.as_user(n int) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000' || n, false);
+end $$;
+
+create table pg_temp.results (name text, ok boolean);
+grant all on pg_temp.results to authenticated;
+
+-- ---------- Admin imports two jobs ----------
+select pg_temp.as_user(3) \g /dev/null
+set role authenticated;
+select public.import_po_rows('[
+ {"job_no":"23-1000","line_no":1,"customer":"RIL-JAM","customer_po_no":"MYB/240576617","po_date":"2023-03-27","delivery_date":"2023-08-04",
+  "description":"STUB SHAFT;MOC:AISI 329","item_code":"2002341322","qty":3,"rate":50350,"basic_value":151050,"taxable_value":151050,
+  "gst_pct":18,"gst_value":27189,"total_value":178239,"invoice_no":"23/049","invoice_date":"2023-08-09","status_text":""},
+ {"job_no":"23-1000","line_no":2,"customer":"RIL-JAM","customer_po_no":"MYB/240576617","po_date":"2023-03-27","delivery_date":"2023-08-04",
+  "description":"BOTTOM INTERMEDIATE SHAFT","item_code":"2002341323","qty":2,"rate":58500,"basic_value":117000,"taxable_value":117000,
+  "gst_pct":18,"gst_value":21060,"total_value":138060,"invoice_no":"23/051","invoice_date":"2023-08-12","status_text":"COMPLETE ORDER DONE"},
+ {"job_no":"25-1061","line_no":1,"customer":"INDORMA-NG","customer_po_no":"524816","po_date":"2025-12-31",
+  "description":"PUMP SHAFT","item_code":"57-01-12-082","qty":1,"rate":213769.36,"basic_value":213769.36,"taxable_value":213769.36,"gst_pct":0,"total_value":213769.36}
+]'::jsonb) \gset imp_
+reset role;
+insert into pg_temp.results values ('admin import created 2 jobs', (:'imp_import_po_rows'::jsonb->>'jobs_new')::int = 2);
+
+-- re-import is idempotent
+select pg_temp.as_user(3) \g /dev/null set role authenticated;
+select public.import_po_rows('[{"job_no":"25-1061","line_no":1,"customer":"INDORMA-NG","description":"PUMP SHAFT","qty":2,"total_value":1}]'::jsonb) \gset re_
+reset role;
+insert into pg_temp.results values ('re-import updates, no duplicates',
+  (:'re_import_po_rows'::jsonb->>'items_updated')::int = 1 and (select count(*) from line_items) = 3
+  and (select qty from line_items li join jobs j on j.id=li.job_id where job_no='25-1061') = 2);
+insert into pg_temp.results values ('import marked invoiced + despatched stages',
+  (select current_stage from line_items where description='BOTTOM INTERMEDIATE SHAFT') = 'despatched'
+  and (select current_stage from line_items where description like 'STUB%') = 'invoiced');
+
+-- ---------- Production manager ----------
+select pg_temp.as_user(5) \g /dev/null set role authenticated;
+insert into pg_temp.results values ('PM sees jobs and items', (select count(*) from jobs) = 2 and (select count(*) from line_items) = 3);
+insert into pg_temp.results values ('PM sees NO prices',    (select count(*) from line_item_prices) = 0);
+insert into pg_temp.results values ('PM sees NO job values',(select count(*) from job_values) = 0);
+insert into pg_temp.results values ('PM sees NO invoices',  (select count(*) from invoices) = 0 and (select count(*) from invoice_status) = 0);
+insert into pg_temp.results values ('PM sees NO despatches',(select count(*) from despatches) = 0);
+insert into pg_temp.results values ('PM sees NO vendor bills',(select count(*) from vendor_bills) = 0);
+insert into stage_events (line_item_id, stage_code, status, mode)
+  select id, 'rm_ordered', 'done', 'in_house' from line_items where description = 'PUMP SHAFT';
+insert into stage_events (line_item_id, stage_code, status, mode)
+  select id, 'final_lathe', 'in_progress', 'job_work' from line_items where description = 'PUMP SHAFT';
+insert into pg_temp.results values ('PM can update production stage',
+  (select current_stage||'/'||current_status from line_items where description = 'PUMP SHAFT') = 'final_lathe/in_progress');
+do $$ begin
+  insert into stage_events (line_item_id, stage_code) select id, 'payment_received' from line_items where description = 'PUMP SHAFT';
+  insert into pg_temp.results values ('PM blocked from finance stage', false);
+exception when insufficient_privilege then insert into pg_temp.results values ('PM blocked from finance stage', true);
+end $$;
+do $$ begin
+  update jobs set customer_po_no = 'hacked';
+  insert into pg_temp.results values ('PM cannot edit jobs', not exists (select 1 from jobs where customer_po_no='hacked'));
+end $$;
+do $$ begin
+  perform public.import_po_rows('[]'::jsonb);
+  insert into pg_temp.results values ('PM cannot import', false);
+exception when insufficient_privilege then insert into pg_temp.results values ('PM cannot import', true);
+end $$;
+do $$ begin
+  update profiles set role = 'director' where id = auth.uid();
+  insert into pg_temp.results values ('PM cannot promote self', (select role from profiles where id = auth.uid()) = 'production_manager');
+end $$;
+reset role;
+
+-- ---------- Accounts ----------
+select pg_temp.as_user(4) \g /dev/null set role authenticated;
+insert into pg_temp.results values ('Accounts sees prices', (select count(*) from line_item_prices) = 3);
+insert into pg_temp.results values ('Accounts sees invoices', (select count(*) from invoice_status) = 2);
+insert into payments (invoice_id, amount, reference) select id, 178239, 'UTR1' from invoices where invoice_no = '23/049';
+insert into pg_temp.results values ('Accounts records payment -> paid',
+  (select payment_status from invoice_status where invoice_no = '23/049') = 'paid');
+insert into stage_events (line_item_id, stage_code) select id, 'payment_received' from line_items where description like 'STUB%';
+insert into pg_temp.results values ('Accounts can mark payment stage', true);
+do $$ begin
+  insert into stage_events (line_item_id, stage_code) select id, 'final_lathe' from line_items where description like 'STUB%';
+  insert into pg_temp.results values ('Accounts blocked from production stage', false);
+exception when insufficient_privilege then insert into pg_temp.results values ('Accounts blocked from production stage', true);
+end $$;
+reset role;
+
+-- Admin records a despatch; Accounts can see its status but not create one
+select pg_temp.as_user(3) \g /dev/null set role authenticated;
+insert into despatches (job_id, vehicle_no, lr_no) select id, 'GJ06AB1234', 'LR55' from jobs where job_no='23-1000';
+reset role;
+select pg_temp.as_user(4) \g /dev/null set role authenticated;
+insert into pg_temp.results values ('Accounts sees despatch status', (select count(*) from despatch_overview) = 1);
+do $$ begin
+  insert into despatches (job_id) select id from jobs limit 1;
+  insert into pg_temp.results values ('Accounts cannot create despatch', false);
+exception when insufficient_privilege then insert into pg_temp.results values ('Accounts cannot create despatch', true);
+end $$;
+reset role;
+
+-- ---------- No role / owners ----------
+select pg_temp.as_user(6) \g /dev/null set role authenticated;
+insert into pg_temp.results values ('User without role sees nothing', (select count(*) from jobs) = 0 and (select count(*) from customers) = 0);
+reset role;
+select pg_temp.as_user(3) \g /dev/null set role authenticated;
+insert into pg_temp.results values ('Admin cannot assign roles', (select role from profiles where full_name='Nobody') is null);
+reset role;
+select pg_temp.as_user(2) \g /dev/null set role authenticated;
+update profiles set role = 'accounts' where full_name = 'Nobody';
+insert into pg_temp.results values ('CEO assigns roles', (select role from profiles where full_name='Nobody') = 'accounts');
+insert into pg_temp.results values ('CEO sees everything',
+  (select count(*) from line_item_prices) = 3 and (select count(*) from despatches) = 1 and (select count(*) from payments) = 1);
+reset role;
+
+-- anon sees nothing
+set role anon;
+do $$ begin
+  perform count(*) from jobs;
+  insert into pg_temp.results values ('Anonymous blocked', false);
+exception when insufficient_privilege then null; end $$;
+reset role;
+insert into pg_temp.results select 'Anonymous blocked', true where not exists (select 1 from pg_temp.results where name='Anonymous blocked');
+
+select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
+select count(*) filter (where not ok) as failures from pg_temp.results \gset
+\if :failures
+  \echo :failures test(s) FAILED
+  select 1/0;
+\else
+  \echo ALL PASSED
+\endif
