@@ -34,7 +34,7 @@ function syncNow() {
 /** Sends the PO year tabs (cell values only) to the app. Returns a short summary. */
 function syncToApp() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const tz = ss.getSpreadsheetTimeZone();
+  const tz = ss.getSpreadsheetTimeZone() || Session.getScriptTimeZone() || 'Asia/Kolkata';
   const sheets = {};
   ss.getSheets().forEach(function (sh) {
     const name = sh.getName();
