@@ -316,6 +316,16 @@ export function parseWorkbook(wb: WorkBook): ParseResult {
   return { rows, issues, sheets };
 }
 
+/** Build a workbook from plain cell grids ({ "PO-26-27": [[...], ...] }), as sent by the Google Sheet sync.
+ *  Much lighter than unzipping an .xlsx, which can exceed the server's CPU limit. */
+export function workbookFromGrids(grids: Record<string, unknown[][]>): WorkBook {
+  const wb = XLSX.utils.book_new();
+  for (const [name, grid] of Object.entries(grids)) {
+    if (Array.isArray(grid)) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(grid), name.slice(0, 31));
+  }
+  return wb;
+}
+
 /** Read a workbook from base64 (phone) or a Buffer/Uint8Array (Node). */
 export function readWorkbook(data: string | Uint8Array, type: 'base64' | 'array' = 'base64'): WorkBook {
   return XLSX.read(data, { type, cellDates: true });

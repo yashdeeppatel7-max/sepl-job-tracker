@@ -324,6 +324,16 @@ export function parseWorkbook(wb: WorkBook): ParseResult {
   return { rows, issues, sheets };
 }
 
+/** Build a workbook from plain cell grids ({ "PO-26-27": [[...], ...] }), as sent by the Google Sheet sync.
+ *  Much lighter than unzipping an .xlsx, which can exceed the server's CPU limit. */
+export function workbookFromGrids(grids: Record<string, unknown[][]>): WorkBook {
+  const wb = XLSX.utils.book_new();
+  for (const [name, grid] of Object.entries(grids)) {
+    if (Array.isArray(grid)) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(grid), name.slice(0, 31));
+  }
+  return wb;
+}
+
 /** Read a workbook from base64 (phone) or a Buffer/Uint8Array (Node). */
 export function readWorkbook(data: string | Uint8Array, type: 'base64' | 'array' = 'base64'): WorkBook {
   return XLSX.read(data, { type, cellDates: true });
@@ -357,8 +367,12 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    if (typeof body?.xlsx_base64 !== 'string') return json({ error: 'Missing xlsx_base64' }, 400);
-    const parsed = parseWorkbook(readWorkbook(body.xlsx_base64, 'base64'));
+    // New Apps Script sends cell values ({ sheets: { "PO-26-27": [[...]] } }); older one sent the whole .xlsx.
+    let wb;
+    if (body?.sheets && typeof body.sheets === 'object') wb = workbookFromGrids(body.sheets);
+    else if (typeof body?.xlsx_base64 === 'string') wb = readWorkbook(body.xlsx_base64, 'base64');
+    else return json({ error: 'Missing sheet data' }, 400);
+    const parsed = parseWorkbook(wb);
     if (!parsed.rows.length) {
       await log(false, { sheets: parsed.sheets }, 'No PO rows found');
       return json({ error: 'No PO rows found. Are the tabs still named like PO-26-27?', sheets: parsed.sheets }, 422);

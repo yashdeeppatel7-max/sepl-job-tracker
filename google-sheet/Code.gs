@@ -31,22 +31,30 @@ function syncNow() {
   SpreadsheetApp.getUi().alert(result);
 }
 
-/** Sends the whole workbook (as .xlsx) to the app. Returns a short summary. */
+/** Sends the PO year tabs (cell values only) to the app. Returns a short summary. */
 function syncToApp() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  DriveApp.getFileById(ss.getId()); // needed so Google grants read access to export the file
-  const exportUrl = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx';
-  const file = UrlFetchApp.fetch(exportUrl, {
-    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-    muteHttpExceptions: true,
+  const tz = ss.getSpreadsheetTimeZone();
+  const sheets = {};
+  ss.getSheets().forEach(function (sh) {
+    const name = sh.getName();
+    if (!/^po[\s-]*\d{2}[\s-]+\d{2}$/i.test(name.trim())) return;   // only tabs like PO-26-27
+    const values = sh.getDataRange().getValues().map(function (row) {
+      return row.map(function (v) {
+        if (v instanceof Date) return v.getFullYear() < 2000 ? '' : Utilities.formatDate(v, tz, 'dd.MM.yyyy');
+        return v;
+      });
+    });
+    while (values.length && values[values.length - 1].every(function (c) { return c === '' || c === 0; })) values.pop();
+    sheets[name] = values;
   });
-  if (file.getResponseCode() !== 200) return 'Could not export the sheet (' + file.getResponseCode() + ').';
+  if (!Object.keys(sheets).length) return 'No tabs named like PO-26-27 found.';
 
   const res = UrlFetchApp.fetch(SYNC_URL, {
     method: 'post',
     contentType: 'application/json',
     headers: { 'x-sync-secret': SYNC_SECRET, apikey: PUBLISHABLE_KEY },
-    payload: JSON.stringify({ xlsx_base64: Utilities.base64Encode(file.getBlob().getBytes()) }),
+    payload: JSON.stringify({ sheets: sheets }),
     muteHttpExceptions: true,
   });
   let body = {};

@@ -28,8 +28,12 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    if (typeof body?.xlsx_base64 !== 'string') return json({ error: 'Missing xlsx_base64' }, 400);
-    const parsed = parseWorkbook(readWorkbook(body.xlsx_base64, 'base64'));
+    // New Apps Script sends cell values ({ sheets: { "PO-26-27": [[...]] } }); older one sent the whole .xlsx.
+    let wb;
+    if (body?.sheets && typeof body.sheets === 'object') wb = workbookFromGrids(body.sheets);
+    else if (typeof body?.xlsx_base64 === 'string') wb = readWorkbook(body.xlsx_base64, 'base64');
+    else return json({ error: 'Missing sheet data' }, 400);
+    const parsed = parseWorkbook(wb);
     if (!parsed.rows.length) {
       await log(false, { sheets: parsed.sheets }, 'No PO rows found');
       return json({ error: 'No PO rows found. Are the tabs still named like PO-26-27?', sheets: parsed.sheets }, 422);
