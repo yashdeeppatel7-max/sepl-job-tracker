@@ -3,7 +3,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Screen, Section, Toggle } from '../../components/ui';
-import { addStageEvent, getItem, getStages, isCancelStage, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
+import { addStageEvent, getItem, getStages, isCancelStage, itemStageText, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
@@ -85,7 +85,7 @@ export default function ItemDetail() {
         <Text style={styles.desc}>{item.description}</Text>
         <Muted>{item.jobs.customers?.code}  ·  Code {item.item_code ?? '–'}  ·  Qty {item.qty} {item.unit}</Muted>
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-          <Pill label={stageLabel(stages, item.current_stage) + (item.current_status === 'in_progress' ? ' · in progress' : '')} tone={cancelled ? 'bad' : 'info'} />
+          <Pill label={itemStageText(stages, item.current_stage, item.current_status)} tone={cancelled ? 'bad' : 'info'} />
           {item.jobs.tpi_required && <Pill label="TPI" tone="warn" />}
           {item.needs_rectification && <Pill label="Rectification" tone="bad" />}
         </View>
@@ -115,7 +115,7 @@ export default function ItemDetail() {
               <>
                 <Muted>Status</Muted>
                 <Chips<Status> value={status} onChange={setStatus} options={[
-                  { value: 'in_progress', label: 'Started' }, { value: 'done', label: 'Done' }, { value: 'skipped', label: 'Not needed' },
+                  { value: 'in_progress', label: selected === 'despatched' ? 'Part despatched' : 'Started' }, { value: 'done', label: selected === 'despatched' ? 'Fully despatched' : 'Done' }, { value: 'skipped', label: 'Not needed' },
                 ]} />
               </>
             )}
@@ -160,7 +160,7 @@ export default function ItemDetail() {
           <Card key={e.id}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.sm }}>
               <Text style={{ fontWeight: '600', color: colors.text, flex: 1 }}>{stageLabel(stages, e.stage_code)}</Text>
-              <Pill label={isCancelStage(e.stage_code) ? 'Cancelled' : e.status === 'done' ? 'Done' : e.status === 'in_progress' ? 'Started' : 'Not needed'} tone={isCancelStage(e.stage_code) ? 'bad' : e.status === 'done' ? 'good' : e.status === 'in_progress' ? 'info' : 'neutral'} />
+              <Pill label={isCancelStage(e.stage_code) ? 'Cancelled' : e.stage_code === 'despatched' && e.status === 'in_progress' ? 'Part' : e.status === 'done' ? 'Done' : e.status === 'in_progress' ? 'Started' : 'Not needed'} tone={isCancelStage(e.stage_code) ? 'bad' : e.status === 'done' ? 'good' : e.status === 'in_progress' ? 'info' : 'neutral'} />
             </View>
             <Muted>
               {date(e.happened_on)}

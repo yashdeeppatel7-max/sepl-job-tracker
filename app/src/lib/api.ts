@@ -58,6 +58,11 @@ export async function getStages(): Promise<Stage[]> {
 export const CANCEL_STAGES = ['item_cancelled', 'po_cancelled'];
 export const isCancelStage = (code: string | null | undefined) => !!code && CANCEL_STAGES.includes(code);
 
+/** Label for an item's current stage; a despatch marked Started reads "Part despatched". */
+export const itemStageText = (stages: Stage[], code: string | null, status: string | null) =>
+  code === 'despatched' && status === 'in_progress' ? 'Part despatched'
+    : stageLabel(stages, code) + (status === 'in_progress' ? ' · in progress' : '');
+
 export const stageLabel = (stages: Stage[], code: string | null) =>
   code ? stages.find((s) => s.code === code)?.label ?? code : 'Not started';
 

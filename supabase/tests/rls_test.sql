@@ -165,6 +165,25 @@ insert into pg_temp.results values ('PO cancelled cancels every item and the job
   and (select count(*) from line_items li join jobs j on j.id = li.job_id where j.job_no = '26-2001' and li.current_stage = 'po_cancelled') = 2);
 reset role;
 
+-- ---------- Part despatch from the sheet ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[
+ {"job_no":"25-3000","line_no":1,"customer":"GNFC","description":"PART ONE","qty":2,"invoices":[{"no":"26/018","date":"2026-05-25"}],"status_text":"Complete"},
+ {"job_no":"25-3000","line_no":2,"customer":"GNFC","description":"PART TWO","qty":2,"invoices":[{"no":"26/030","date":"2026-06-19"}],"status_text":"01 No. Pending"}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('sheet "Pending" = part despatched, PO stays open',
+  (select current_stage||'/'||current_status from line_items where description = 'PART TWO') = 'despatched/in_progress'
+  and (select status from jobs where job_no = '25-3000') = 'in_progress'
+  and (select items_despatched from job_overview where job_no = '25-3000') = 1);
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[
+ {"job_no":"25-3000","line_no":1,"customer":"GNFC","description":"PART ONE","qty":2,"invoices":[{"no":"26/018","date":"2026-05-25"}],"status_text":"Complete"},
+ {"job_no":"25-3000","line_no":2,"customer":"GNFC","description":"PART TWO","qty":2,"invoices":[{"no":"26/030","date":"2026-06-19"}],"status_text":"Dsp-1_01 No. Pndng-01 No. Dsp-2 Completed"}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('later "Completed" closes the PO',
+  (select current_status from line_items where description = 'PART TWO') = 'done'
+  and (select status from jobs where job_no = '25-3000') = 'completed');
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed
