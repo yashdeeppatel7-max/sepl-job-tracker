@@ -8,6 +8,7 @@ A mobile app (Android and iPhone) where staff see customer POs and the productio
 | Admin | ✅ | ✅ | ✅ update | ✅ | ✅ record | – |
 | Accounts | ✅ | ✅ | view, update invoice/payment stages | ✅ | view status | – |
 | Production manager | ✅ | ❌ | ✅ update | ❌ | ❌ | – |
+| Production incharge | ✅ | ❌ | ✅ update | ❌ | ❌ | – |
 
 The limits are enforced **in the database** (Postgres row-level security), not only in the app, so a Production manager's phone never receives prices even if someone tampers with the app. Money lives in separate tables (`line_item_prices`, `invoices`, `payments`, `vendor_bills`) that only finance roles can read. Sheet status / sale notes, which often mention amounts, are stored with the prices for the same reason.
 
@@ -18,7 +19,7 @@ supabase/
   migrations/0001_schema.sql    tables, stages, role rules, views
   migrations/0002_import.sql    import_po_rows(): saves parsed Excel rows, safe to re-run
   functions/manage-users/       lets Director/CEO add staff accounts (runs on the server)
-  tests/run.sh                  31 role-rule checks against plain Postgres
+  tests/run.sh                  36 role-rule checks against plain Postgres
 app/                            Expo (React Native) app, Expo Router screens in src/app/
   src/lib/poSheetParser.ts      reads your Google-Sheets PO list (.xlsx)
   scripts/parse-sheet.ts        try the parser on a file from the command line

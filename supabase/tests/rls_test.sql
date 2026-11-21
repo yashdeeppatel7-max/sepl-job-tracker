@@ -184,6 +184,21 @@ insert into pg_temp.results values ('later "Completed" closes the PO',
   (select current_status from line_items where description = 'PART TWO') = 'done'
   and (select status from jobs where job_no = '25-3000') = 'completed');
 
+-- ---------- Production incharge ----------
+insert into auth.users (id, email, raw_user_meta_data) values ('00000000-0000-0000-0000-000000000008','pi@x','{"full_name":"Incharge"}');
+update profiles set role = 'production_incharge' where id = '00000000-0000-0000-0000-000000000008';
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000008'; set role authenticated;
+insert into pg_temp.results values ('Incharge sees items, NO prices or invoices',
+  (select count(*) from line_items) > 0 and (select count(*) from line_item_prices) = 0 and (select count(*) from invoices) = 0);
+insert into stage_events (line_item_id, stage_code, status) select id, 'rm_ordered', 'done' from line_items where description = 'KEEP ME';
+insert into pg_temp.results values ('Incharge can update production stage', exists (select 1 from stage_events where created_by = '00000000-0000-0000-0000-000000000008'));
+do $$ begin
+  insert into stage_events (line_item_id, stage_code) select id, 'invoiced' from line_items where description = 'KEEP ME';
+  insert into pg_temp.results values ('Incharge blocked from finance stage', false);
+exception when insufficient_privilege then insert into pg_temp.results values ('Incharge blocked from finance stage', true);
+end $$;
+reset role;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed

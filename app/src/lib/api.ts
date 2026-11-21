@@ -270,13 +270,16 @@ export async function updateProfile(id: string, patch: { role?: string | null; a
 }
 /** Calls the manage-users Edge Function (needs the service key, so it runs on the server). */
 export async function createUser(u: { email: string; password: string; full_name: string; role: string }) {
-  const { data, error } = await supabase.functions.invoke('manage-users', { body: { action: 'create', ...u } });
+  // The add-user server function may predate newer roles: create with the closest older role, then switch.
+  const NEWER: Record<string, string> = { production_incharge: 'production_manager' };
+  const { data, error } = await supabase.functions.invoke('manage-users', { body: { action: 'create', ...u, role: NEWER[u.role] ?? u.role } });
   if (error) {
     const ctx = (error as any).context;
     let msg = error.message;
     try { const body = await ctx?.json?.(); if (body?.error) msg = body.error; } catch {}
     throw new Error(msg);
   }
+  if (NEWER[u.role] && (data as any)?.id) await updateProfile((data as any).id, { role: u.role });
   return data;
 }
 

@@ -3,7 +3,7 @@
 // never in the app. Deploy: supabase functions deploy manage-users
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const ROLES = ['director', 'ceo', 'admin', 'accounts', 'production_manager'];
+const ROLES = ['director', 'ceo', 'admin', 'accounts', 'production_manager', 'production_incharge'];
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
