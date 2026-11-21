@@ -146,6 +146,15 @@ export function parseInvoiceNos(v: unknown): string[] {
   return [...new Set(out)];
 }
 
+/** Invoice numbers and credit notes in the order they appear (credit notes as "CR"). */
+function invoiceCellTokens(v: unknown): string[] {
+  if (v == null) return [];
+  const out: string[] = [];
+  for (const m of String(v).matchAll(/(?<![\d/])(\d{2})\/(\d{2,4})(?![\d/])|\bCR\b[\s.\-]*(?:No\.?)?\s*-?\d+/gi))
+    out.push(m[1] ? `${m[1]}/${m[2]}` : 'CR');
+  return out;
+}
+
 export function parseNumber(v: unknown): number | null {
   if (v == null || v === '') return null;
   if (typeof v === 'number') return isFinite(v) ? v : null;
@@ -229,7 +238,13 @@ export function parseSheet(name: string, ws: WorkSheet, issues: ParseIssue[]): I
 
     const invNos = parseInvoiceNos(get(row, 'invoice_no'));
     const invDates = parseDates(get(row, 'invoice_date'));
-    const invoices = invNos.map((no, i) => ({ no, date: invDates[i] ?? invDates[invDates.length - 1] ?? null }));
+    // Credit notes in the invoice cell ("25/030 CR No.08 25/055") usually have their own date in the
+    // date cell, so match dates by position among all entries when the counts line up.
+    const invTokens = invoiceCellTokens(get(row, 'invoice_no'));
+    const invoices = invNos.map((no, i) => {
+      const pos = invTokens.length === invDates.length ? invTokens.indexOf(no) : -1;
+      return { no, date: (pos >= 0 ? invDates[pos] : invDates[i]) ?? invDates[invDates.length - 1] ?? null };
+    });
 
     const status = text(get(row, 'status'));
     const sale = text(get(row, 'sale_notes'));
