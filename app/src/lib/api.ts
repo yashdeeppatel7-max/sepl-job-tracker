@@ -4,7 +4,7 @@
 import { must } from './useQuery';
 import { supabase } from './supabase';
 
-export type Stage = { code: string; seq: number; label: string; owner: 'production' | 'finance'; optional_for: 'tpi' | 'rectification' | null };
+export type Stage = { code: string; seq: number; label: string; owner: 'production' | 'finance' | 'mgmt'; optional_for: 'tpi' | 'rectification' | null };
 export type JobStatus = 'enquiry' | 'quoted' | 'po_received' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled';
 
 export type JobRow = {
@@ -54,6 +54,10 @@ export async function getStages(): Promise<Stage[]> {
   stagesCache = must(await supabase.from('stages').select('*').order('seq'));
   return stagesCache!;
 }
+/** Item cancelled / PO cancelled: recorded by Director, CEO or Admin only. */
+export const CANCEL_STAGES = ['item_cancelled', 'po_cancelled'];
+export const isCancelStage = (code: string | null | undefined) => !!code && CANCEL_STAGES.includes(code);
+
 export const stageLabel = (stages: Stage[], code: string | null) =>
   code ? stages.find((s) => s.code === code)?.label ?? code : 'Not started';
 

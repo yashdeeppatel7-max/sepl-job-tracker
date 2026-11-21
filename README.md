@@ -18,7 +18,7 @@ supabase/
   migrations/0001_schema.sql    tables, stages, role rules, views
   migrations/0002_import.sql    import_po_rows(): saves parsed Excel rows, safe to re-run
   functions/manage-users/       lets Director/CEO add staff accounts (runs on the server)
-  tests/run.sh                  28 role-rule checks against plain Postgres
+  tests/run.sh                  31 role-rule checks against plain Postgres
 app/                            Expo (React Native) app, Expo Router screens in src/app/
   src/lib/poSheetParser.ts      reads your Google-Sheets PO list (.xlsx)
   scripts/parse-sheet.ts        try the parser on a file from the command line
@@ -29,6 +29,8 @@ app/                            Expo (React Native) app, Expo Router screens in 
 Each item moves through: Raw material ordered → Raw material received → Raw material testing → *TPI witness of RM testing* → Proof machining → Final lathe → Drilling / keyway / other ops → DP / other testing → *Defect rectification* → Grinding / final CNC finish → Balancing / final activity → Dimensional check → *TPI inspection* → Customer approval → Invoice prepared → Despatched → Documents sent → Payment received.
 
 Stages in *italics* only show when the job needs TPI or the item is flagged for rectification. Every production stage can be marked in-house or job work (with vendor name). Enquiry, quotation and PO received are job statuses. Stages are rows in the `stages` table, so adding or renaming one is a one-line change.
+
+**Item cancelled** and **PO cancelled** (`0004_cancel_stages.sql`) can be recorded by Director/CEO/Admin only. PO cancelled on any item cancels every item and sets the job to Cancelled; a job whose remaining items are all despatched counts as Completed.
 
 ## Setup (about 30 minutes, once)
 

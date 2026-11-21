@@ -124,6 +124,7 @@ export default function Jobs() {
 
 function stageText(j: JobRow, stages: { seq: number; label: string }[]) {
   if (j.status === 'completed') return 'All despatched';
+  if (j.status === 'cancelled') return 'Cancelled';
   if (j.slowest_stage_seq == null) return 'Not started';
   return stages.find((s) => s.seq === j.slowest_stage_seq)?.label ?? '';
 }

@@ -138,6 +138,33 @@ exception when insufficient_privilege then null; end $$;
 reset role;
 insert into pg_temp.results select 'Anonymous blocked', true where not exists (select 1 from pg_temp.results where name='Anonymous blocked');
 
+-- ---------- Cancellation stages ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[
+ {"job_no":"26-2000","line_no":1,"customer":"GNFC","description":"CANCEL ME","qty":1},
+ {"job_no":"26-2000","line_no":2,"customer":"GNFC","description":"KEEP ME","qty":1},
+ {"job_no":"26-2001","line_no":1,"customer":"GNFC","description":"SHORT A","qty":1},
+ {"job_no":"26-2001","line_no":2,"customer":"GNFC","description":"SHORT B","qty":1}]'::jsonb);
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
+do $$ begin
+  insert into stage_events (line_item_id, stage_code) select id, 'item_cancelled' from line_items where description = 'CANCEL ME';
+  insert into pg_temp.results values ('PM blocked from cancelling', false);
+exception when insufficient_privilege then insert into pg_temp.results values ('PM blocked from cancelling', true);
+end $$;
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+insert into stage_events (line_item_id, stage_code, status) select id, 'item_cancelled', 'done' from line_items where description = 'CANCEL ME';
+insert into stage_events (line_item_id, stage_code, status) select id, 'despatched', 'done' from line_items where description = 'KEEP ME';
+insert into pg_temp.results values ('item cancelled + rest despatched = job completed',
+  (select status from jobs where job_no = '26-2000') = 'completed'
+  and (select item_count from job_overview where job_no = '26-2000') = 1);
+insert into stage_events (line_item_id, stage_code, status, note) select id, 'po_cancelled', 'done', 'Short closed' from line_items where description = 'SHORT A';
+insert into pg_temp.results values ('PO cancelled cancels every item and the job',
+  (select status from jobs where job_no = '26-2001') = 'cancelled'
+  and (select count(*) from line_items li join jobs j on j.id = li.job_id where j.job_no = '26-2001' and li.current_stage = 'po_cancelled') = 2);
+reset role;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed

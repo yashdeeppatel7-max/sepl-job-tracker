@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section, Title, Toggle } from '../../components/ui';
 import {
-  getJob, getJobFinance, getStages, JOB_STATUS_LABEL, stageLabel, updateJob, type JobStatus,
+  getJob, getJobFinance, getStages, isCancelStage, JOB_STATUS_LABEL, stageLabel, updateJob, type JobStatus,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, money, parseUserDate, toUserDate } from '../../lib/format';
@@ -79,7 +79,7 @@ export default function JobDetail() {
               <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>{it.line_no}. {it.description}</Text>
               <Muted>Code {it.item_code ?? '–'}  ·  Qty {it.qty} {it.unit}</Muted>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                <Pill label={`${stageLabel(stages, it.current_stage)}${it.current_status === 'in_progress' ? ' · in progress' : ''}`} tone={done ? 'good' : it.current_stage ? 'info' : 'neutral'} />
+                <Pill label={`${stageLabel(stages, it.current_stage)}${it.current_status === 'in_progress' ? ' · in progress' : ''}`} tone={isCancelStage(it.current_stage) ? 'bad' : done ? 'good' : it.current_stage ? 'info' : 'neutral'} />
                 {price?.total_value != null && <Text style={{ fontWeight: '600', color: colors.primary }}>{money(price.total_value)}</Text>}
               </View>
               {price?.finance_notes ? <Muted>{price.finance_notes}</Muted> : null}
