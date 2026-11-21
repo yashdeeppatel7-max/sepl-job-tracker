@@ -66,7 +66,7 @@ export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
 export async function listJobs(): Promise<JobRow[]> {
   const all: JobRow[] = [];
   for (let from = 0; ; from += 1000) {
-    const page = must(await supabase.from('job_overview').select('*').order('job_no', { ascending: false }).range(from, from + 999));
+    const page = must(await supabase.from('job_overview').select('*').order('job_no', { ascending: true }).range(from, from + 999));
     all.push(...(page as JobRow[]));
     if (page.length < 1000) break;
   }
