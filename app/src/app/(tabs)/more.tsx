@@ -3,11 +3,14 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, Muted, Screen, Title } from '../../components/ui';
 import { useAuth } from '../../lib/auth';
+import { lastSync } from '../../lib/api';
+import { useQuery } from '../../lib/useQuery';
 import { ROLE_LABEL } from '../../lib/roles';
 import { colors } from '../../theme';
 
 export default function More() {
   const { profile, role, perms, session, signOut } = useAuth();
+  const sync = useQuery(() => (perms.manageJobs ? lastSync() : Promise.resolve(null)), [perms.manageJobs]);
   return (
     <Screen>
       <Card>
@@ -23,6 +26,16 @@ export default function More() {
         <Item icon="key-outline" label="Change password" onPress={() => router.push('/password')} />
         <Item icon="log-out-outline" label="Sign out" onPress={signOut} danger last />
       </Card>
+      {perms.manageJobs && sync.data && (
+        <Card>
+          <Text style={{ fontWeight: '600', color: colors.text }}>Google Sheet sync</Text>
+          <Muted>
+            Last run {new Date(sync.data.ran_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+            {sync.data.ok ? `: ${sync.data.summary?.rows ?? 0} items, ${sync.data.summary?.jobs_new ?? 0} new jobs` : ''}
+          </Muted>
+          {!sync.data.ok && <Text style={{ color: colors.bad }}>Failed: {sync.data.error}</Text>}
+        </Card>
+      )}
       <Card>
         <Text style={{ fontWeight: '600', color: colors.text }}>What you can see</Text>
         <Muted>{perms.seeMoney ? '• PO values, invoices, payments and vendor bills' : '• Items and quantities only (no values)'}</Muted>

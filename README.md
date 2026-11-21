@@ -78,3 +78,9 @@ node scripts/parse-sheet.ts path/to/PO_List.xlsx
 ## Notes
 - `xlsx` comes from npm at 0.18.5, which has known issues with malicious files. Only Director/CEO/Admin can import, and they import your own sheet, so the risk is low; for production builds switch to the maintained build: `npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`.
 - Built on Expo SDK 58 / React Native 0.88.
+
+## Google Sheet auto-sync
+The PO Google Sheet can push itself to the app every hour (plus **SEPL App → Sync now** in the sheet).
+- `supabase/migrations/0003_sheet_sync.sql`: lets the sync function import; adds `sync_log`.
+- `supabase/functions/sync-sheet/`: receives the workbook, parses it with the same parser as the app, imports it. Generated as one file by `node scripts/build-sync-function.mjs` (edit `handler.ts.txt` or the app parser, then rebuild). Needs the `SYNC_SECRET` function secret and "Verify JWT" off.
+- `google-sheet/Code.gs`: the Apps Script to paste into the sheet (put the same `SYNC_SECRET` in it).

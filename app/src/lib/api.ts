@@ -276,3 +276,11 @@ export async function importRows(rows: unknown[]) {
   const res = await supabase.rpc('import_po_rows', { p_rows: rows });
   return must(res) as { jobs_new: number; jobs_updated: number; items_new: number; items_updated: number; invoices_new: number };
 }
+
+// ---------- Google Sheet sync ----------
+export type SyncRun = { ran_at: string; ok: boolean; summary: Record<string, number> | null; error: string | null };
+export async function lastSync(): Promise<SyncRun | null> {
+  const { data, error } = await supabase.from('sync_log').select('ran_at, ok, summary, error').order('ran_at', { ascending: false }).limit(1);
+  if (error) return null; // table not created yet
+  return (data?.[0] as SyncRun) ?? null;
+}

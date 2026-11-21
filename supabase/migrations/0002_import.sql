@@ -24,7 +24,7 @@ declare
   v_seen_jobs  text[] := '{}';
   inv          jsonb;
 begin
-  if not public.is_mgmt() then
+  if not (public.is_mgmt() or current_user = 'service_role') then
     raise exception 'Only Director, CEO or Admin can import POs' using errcode = '42501';
   end if;
 

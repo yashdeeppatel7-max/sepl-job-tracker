@@ -1,0 +1,47 @@
+// Supabase Edge Function: receives the PO workbook from the Google Sheet's
+// Apps Script and imports it, exactly like the app's "Import from Excel".
+// Protected by a shared secret (SYNC_SECRET), set under Edge Functions → Secrets.
+// Turn OFF "Verify JWT" for this function: the secret is the check.
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
+/*__PARSER__*/
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+function sameSecret(a: string, b: string) {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+Deno.serve(async (req) => {
+  if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
+  const secret = Deno.env.get('SYNC_SECRET') ?? '';
+  if (secret.length < 24) return json({ error: 'SYNC_SECRET is not set on the server' }, 500);
+  if (!sameSecret(req.headers.get('x-sync-secret') ?? '', secret)) return json({ error: 'Wrong sync key' }, 401);
+
+  const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const log = (ok: boolean, summary: unknown, error?: string) =>
+    admin.from('sync_log').insert({ ok, summary, error: error ?? null });
+
+  try {
+    const body = await req.json();
+    if (typeof body?.xlsx_base64 !== 'string') return json({ error: 'Missing xlsx_base64' }, 400);
+    const parsed = parseWorkbook(readWorkbook(body.xlsx_base64, 'base64'));
+    if (!parsed.rows.length) {
+      await log(false, { sheets: parsed.sheets }, 'No PO rows found');
+      return json({ error: 'No PO rows found. Are the tabs still named like PO-26-27?', sheets: parsed.sheets }, 422);
+    }
+    const { data, error } = await admin.rpc('import_po_rows', { p_rows: toDbRows(parsed.rows) });
+    if (error) throw new Error(error.message);
+    const summary = { ...data, rows: parsed.rows.length, warnings: parsed.issues.length };
+    await log(true, summary);
+    return json({ ok: true, ...summary, issues: parsed.issues.slice(0, 30) });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await log(false, null, msg);
+    return json({ error: msg }, 500);
+  }
+});
