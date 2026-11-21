@@ -11,6 +11,8 @@ import { colors, space } from '../../theme';
 
 type Filter = 'total' | 'open' | 'ongoing' | 'tpi' | 'completed';
 const ALL_OPEN = 'all-open';
+const ALL_ONGOING = 'all-ongoing';
+const isAll = (p: string) => p === ALL_OPEN || p === ALL_ONGOING;
 
 /** Job no. 26-1012 → FY26-27 (job numbers restart each financial year). */
 export function fyOf(jobNo: string) {
@@ -48,7 +50,9 @@ export default function Jobs() {
   // jobs in the chosen period, before the status filter
   const inPeriod = useMemo(() => {
     const jobs = data?.jobs ?? [];
-    return period === ALL_OPEN ? jobs.filter(isPending) : jobs.filter((j) => fyOf(j.job_no) === period);
+    if (period === ALL_OPEN) return jobs.filter(isPending);
+    if (period === ALL_ONGOING) return jobs.filter((j) => matches(j, 'ongoing'));
+    return jobs.filter((j) => fyOf(j.job_no) === period);
   }, [data, period]);
 
   const counts = useMemo(() => {
@@ -60,7 +64,7 @@ export default function Jobs() {
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase();
     return inPeriod.filter((j) => {
-      if (period !== ALL_OPEN && !matches(j, filter)) return false;
+      if (!isAll(period) && !matches(j, filter)) return false;
       if (!term) return true;
       return [j.job_no, j.customer_code, j.customer_name, j.customer_po_no].some((v) => v?.toLowerCase().includes(term));
     });
@@ -72,7 +76,7 @@ export default function Jobs() {
   );
   const overdue = shown.filter((j) => j.overdue).length;
 
-  const periodOptions = [{ value: ALL_OPEN, label: `All open POs` }, ...years.map((y) => ({ value: y, label: y }))];
+  const periodOptions = [{ value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y }))];
   const filterOptions: { value: Filter; label: string }[] = [
     { value: 'total', label: `Total PO received (${counts.total})` },
     { value: 'open', label: `Open PO (${counts.open})` },
@@ -92,9 +96,9 @@ export default function Jobs() {
       }} />
       <View style={styles.top}>
         <Chips options={periodOptions} value={period} onChange={(v) => { setPeriod(v); setFilter('total'); }} />
-        {period !== ALL_OPEN && <Chips options={filterOptions} value={filter} onChange={setFilter} />}
+        {!isAll(period) && <Chips options={filterOptions} value={filter} onChange={setFilter} />}
         <View style={styles.stats}>
-          <Stat label={period === ALL_OPEN ? 'Open POs, all years' : 'POs shown'} value={String(shown.length)} />
+          <Stat label={period === ALL_OPEN ? 'Open POs, all years' : period === ALL_ONGOING ? 'Ongoing POs, all years' : 'POs shown'} value={String(shown.length)} />
           <Stat label="Overdue" value={String(overdue)} tone={overdue ? colors.bad : undefined} />
           {periodTotal != null && <Stat label="Value incl. GST" value={moneyShort(periodTotal)} />}
         </View>
