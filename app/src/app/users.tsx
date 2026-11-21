@@ -28,7 +28,8 @@ export default function Users() {
 
 function UserCard({ p, self, onChange }: { p: ProfileRow; self: boolean; onChange: () => void }) {
   const [open, setOpen] = useState(false);
-  async function save(patch: { role?: string | null; active?: boolean }) {
+  const [name, setName] = useState(p.full_name);
+  async function save(patch: { role?: string | null; active?: boolean; full_name?: string }) {
     try { await updateProfile(p.id, patch); onChange(); } catch (e: any) { notify('Could not save', e.message); }
   }
   return (
@@ -37,8 +38,11 @@ function UserCard({ p, self, onChange }: { p: ProfileRow; self: boolean; onChang
         <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>{p.full_name || '(no name)'}{self ? ' (you)' : ''}</Text>
         <Pill label={!p.active ? 'Disabled' : p.role ? ROLE_LABEL[p.role as Role] : 'No role'} tone={!p.active ? 'bad' : p.role ? 'info' : 'warn'} />
       </View>
+      {p.email ? <Muted>{p.email}</Muted> : null}
       {open && !self && (
         <>
+          <Field label="Name" value={name} onChangeText={setName} placeholder="e.g. Bhavna" />
+          {name.trim() !== p.full_name && <Button title="Save name" kind="secondary" onPress={() => save({ full_name: name.trim() })} />}
           <Muted>Role</Muted>
           <Chips<Role> options={roleOptions} value={(p.role ?? '') as Role} onChange={(r) => save({ role: r })} />
           <Toggle label="Can sign in" value={p.active} onChange={(v) => save({ active: v })} />

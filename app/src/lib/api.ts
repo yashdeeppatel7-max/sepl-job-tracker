@@ -261,7 +261,7 @@ export async function findJobByNo(job_no: string) {
 }
 
 // ---------- users ----------
-export type ProfileRow = { id: string; full_name: string; role: string | null; active: boolean; created_at: string };
+export type ProfileRow = { id: string; full_name: string; email?: string | null; role: string | null; active: boolean; created_at: string };
 export async function listProfiles(): Promise<ProfileRow[]> {
   return must(await supabase.from('profiles').select('*').order('full_name')) as ProfileRow[];
 }
