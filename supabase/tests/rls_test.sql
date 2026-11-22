@@ -199,6 +199,21 @@ exception when insufficient_privilege then insert into pg_temp.results values ('
 end $$;
 reset role;
 
+-- ---------- Sheet cleared = undo ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-4000","line_no":1,"customer":"RIL-JAM","description":"UNDO ME","qty":1,"invoices":[{"no":"26/999","date":"2026-11-20"}]}]'::jsonb);
+select public.import_po_rows('[{"job_no":"26-4000","line_no":1,"customer":"RIL-JAM","description":"UNDO ME","qty":1,"invoices":[]}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('cleared invoice in sheet removes Excel stages + invoice',
+  (select current_stage from line_items where description = 'UNDO ME') is null
+  and not exists (select 1 from invoices where invoice_no = '26/999')
+  and (select status from jobs where job_no = '26-4000') <> 'completed');
+-- PM sees who made an update by someone else
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
+insert into pg_temp.results values ('everyone sees updater names',
+  exists (select 1 from stage_events where created_by_name = 'Incharge'));
+reset role;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed

@@ -165,7 +165,7 @@ export default function ItemDetail() {
             <Muted>
               {date(e.happened_on)}
               {e.mode === 'job_work' ? `  ·  Job work${e.vendors ? `: ${e.vendors.name}` : ''}` : ''}
-              {e.profiles?.full_name ? `  ·  by ${e.profiles.full_name}` : ''}
+              {(e.created_by_name || e.profiles?.full_name) ? `  ·  by ${e.created_by_name || e.profiles?.full_name}` : ''}
             </Muted>
             {e.note ? <Text style={{ color: colors.text }}>{e.note}</Text> : null}
           </Card>

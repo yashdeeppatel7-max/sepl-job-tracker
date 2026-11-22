@@ -34,6 +34,7 @@ export type StageEvent = {
   id: string; stage_code: string; status: 'in_progress' | 'done' | 'skipped'; mode: 'in_house' | 'job_work';
   note: string | null; happened_on: string; created_at: string; vendors: { name: string } | null;
   profiles: { full_name: string } | null;
+  created_by_name?: string | null;
 };
 
 export type InvoiceRow = {
