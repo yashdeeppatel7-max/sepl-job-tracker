@@ -35,6 +35,7 @@ export type StageEvent = {
   note: string | null; happened_on: string; created_at: string; vendors: { name: string } | null;
   profiles: { full_name: string } | null;
   created_by_name?: string | null;
+  created_by?: string | null; edited_at?: string | null; edited_by_name?: string | null;
 };
 
 export type InvoiceRow = {
@@ -196,7 +197,26 @@ export async function getInvoice(id: string) {
   };
 }
 
-export async function updateInvoice(id: string, patch: { amount?: number | null; due_date?: string | null; notes?: string | null }) {
+/** Correct a stage update (own updates, or any for Director/CEO/Admin; the server checks). */
+export async function updateStageEvent(id: string, patch: { status?: string; note?: string | null; happened_on?: string }) {
+  must(await supabase.from('stage_events').update(patch).eq('id', id).select('id'));
+}
+export async function deleteStageEvent(id: string) {
+  const rows = must(await supabase.from('stage_events').delete().eq('id', id).select('id')) as unknown[];
+  if (!rows.length) throw new Error('You can only delete your own updates.');
+}
+export async function setInvoiceItems(invoiceId: string, itemIds: string[]) {
+  must(await supabase.from('invoice_items').delete().eq('invoice_id', invoiceId).select('invoice_id'));
+  if (itemIds.length) must(await supabase.from('invoice_items').insert(itemIds.map((line_item_id) => ({ invoice_id: invoiceId, line_item_id }))).select('invoice_id'));
+}
+export async function deleteInvoice(id: string) {
+  must(await supabase.from('invoices').delete().eq('id', id).select('id'));
+}
+export async function deletePayment(id: string) {
+  must(await supabase.from('payments').delete().eq('id', id).select('id'));
+}
+
+export async function updateInvoice(id: string, patch: { amount?: number | null; due_date?: string | null; notes?: string | null; invoice_no?: string; invoice_date?: string | null }) {
   must(await supabase.from('invoices').update(patch).eq('id', id).select('id'));
 }
 

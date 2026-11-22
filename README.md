@@ -19,7 +19,7 @@ supabase/
   migrations/0001_schema.sql    tables, stages, role rules, views
   migrations/0002_import.sql    import_po_rows(): saves parsed Excel rows, safe to re-run
   functions/manage-users/       lets Director/CEO add staff accounts (runs on the server)
-  tests/run.sh                  41 role-rule checks against plain Postgres
+  tests/run.sh                  45 role-rule checks against plain Postgres
 app/                            Expo (React Native) app, Expo Router screens in src/app/
   src/lib/poSheetParser.ts      reads your Google-Sheets PO list (.xlsx)
   scripts/parse-sheet.ts        try the parser on a file from the command line

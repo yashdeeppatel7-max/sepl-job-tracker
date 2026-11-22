@@ -237,6 +237,23 @@ insert into pg_temp.results values ('new invoice after rejection = despatched ag
   and (select status from jobs where job_no = '26-5000') = 'completed'
   and (select count(*) from stage_events e join line_items li on li.id = e.line_item_id where li.description = 'REJECT ME') = 6);
 
+-- ---------- Editing entries ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000008'; set role authenticated;
+update stage_events set note = 'fixed by incharge' where created_by = '00000000-0000-0000-0000-000000000008';
+update stage_events set note = 'hacked' where created_by = '00000000-0000-0000-0000-000000000005';
+reset role;
+insert into pg_temp.results values ('own update can be edited, stamped with editor',
+  exists (select 1 from stage_events where note = 'fixed by incharge' and edited_by_name = 'Incharge' and created_by_name = 'Incharge'));
+insert into pg_temp.results values ('someone else''s update cannot be edited', not exists (select 1 from stage_events where note = 'hacked'));
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+update stage_events set note = 'admin fix' where created_by = '00000000-0000-0000-0000-000000000005' and stage_code = 'rm_ordered';
+reset role;
+insert into pg_temp.results values ('admin can edit anyone''s update', exists (select 1 from stage_events where note = 'admin fix' and edited_by_name = 'Admin'));
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+update invoices set invoice_no = '26/601' where invoice_no = '26/600';
+reset role;
+insert into pg_temp.results values ('accounts can correct an invoice no.', exists (select 1 from invoices where invoice_no = '26/601' and edited_by_name = 'Accounts'));
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed

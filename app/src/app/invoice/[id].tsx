@@ -1,8 +1,8 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { Button, Card, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section } from '../../components/ui';
-import { addPayment, getInvoice, updateInvoice } from '../../lib/api';
+import { Button, Card, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section, Toggle } from '../../components/ui';
+import { addPayment, deleteInvoice, deletePayment, getInvoice, getJob, setInvoiceItems, updateInvoice } from '../../lib/api';
 import { date, money, parseNumber, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors } from '../../theme';
@@ -14,7 +14,8 @@ export default function InvoiceDetail() {
   const [amount, setAmount] = useState('');
   const [on, setOn] = useState(toUserDate(todayIso()));
   const [ref, setRef] = useState('');
-  const [invAmount, setInvAmount] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [delPay, setDelPay] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (error) return <Screen><ErrorBox message={error} /></Screen>;
@@ -35,11 +36,6 @@ export default function InvoiceDetail() {
     } catch (e: any) { notify('Could not save', e.message); } finally { setBusy(false); }
   }
 
-  async function saveAmount() {
-    const a = parseNumber(invAmount ?? '');
-    if (a == null) return notify('Enter a number');
-    try { await updateInvoice(inv.id, { amount: a }); setInvAmount(null); reload(); } catch (e: any) { notify('Could not save', e.message); }
-  }
 
   return (
     <Screen refreshing={loading} onRefresh={reload}>
@@ -53,12 +49,11 @@ export default function InvoiceDetail() {
         <Row label="Amount (incl. GST)" value={money(inv.amount)} />
         <Row label="Received" value={money(inv.paid_amount)} />
         <Row label="Balance" value={money(balance)} />
-        {invAmount == null
-          ? <Text style={{ color: colors.info, fontWeight: '600' }} onPress={() => setInvAmount(inv.amount?.toString() ?? '')}>Edit invoice amount</Text>
-          : <>
-              <Field label="Invoice amount (incl. GST)" value={invAmount} onChangeText={setInvAmount} keyboardType="decimal-pad" />
-              <Button title="Save amount" onPress={saveAmount} />
-            </>}
+        {(inv as any).edited_at ? <Muted>Edited{(inv as any).edited_by_name ? ` by ${(inv as any).edited_by_name}` : ''} on {date(String((inv as any).edited_at).slice(0, 10))}</Muted> : null}
+        {editing
+          ? <EditInvoice inv={inv} linked={items.map((it) => it.line_items.id)} hasPayments={payments.length > 0}
+              onDone={(deleted) => { setEditing(false); if (deleted) router.back(); else reload(); }} />
+          : <Text style={{ color: colors.info, fontWeight: '600' }} onPress={() => setEditing(true)}>Edit invoice</Text>}
       </Card>
 
       <Section title="Items on this invoice">
@@ -75,6 +70,10 @@ export default function InvoiceDetail() {
           <Card key={p.id}>
             <Row label={date(p.paid_on)} value={money(p.amount)} />
             {p.reference ? <Muted>Ref {p.reference}</Muted> : null}
+            <Text style={{ color: colors.bad, fontWeight: '600' }} onPress={async () => {
+              if (delPay !== p.id) return setDelPay(p.id);
+              try { await deletePayment(p.id); setDelPay(null); reload(); } catch (e: any) { notify('Could not delete', e.message); }
+            }}>{delPay === p.id ? 'Tap again to delete this payment' : 'Delete payment'}</Text>
           </Card>
         ))}
         <Card>
@@ -85,5 +84,54 @@ export default function InvoiceDetail() {
         </Card>
       </Section>
     </Screen>
+  );
+}
+
+function EditInvoice({ inv, linked, hasPayments, onDone }: {
+  inv: { id: string; job_id: string; invoice_no: string; invoice_date: string | null; amount: number | null };
+  linked: string[]; hasPayments: boolean; onDone: (deleted?: boolean) => void;
+}) {
+  const { data: job } = useQuery(() => getJob(inv.job_id), [inv.job_id]);
+  const [no, setNo] = useState(inv.invoice_no);
+  const [on, setOn] = useState(toUserDate(inv.invoice_date));
+  const [amt, setAmt] = useState(inv.amount?.toString() ?? '');
+  const [picked, setPicked] = useState<Record<string, boolean>>(Object.fromEntries(linked.map((id) => [id, true])));
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    const d = on.trim() ? parseUserDate(on) : null;
+    if (on.trim() && !d) return notify('Check the date', 'Use the format 31.12.2026');
+    if (!no.trim()) return notify('Enter the invoice number');
+    const a = amt.trim() ? parseNumber(amt) : null;
+    if (amt.trim() && a == null) return notify('Check the amount');
+    setBusy(true);
+    try {
+      await updateInvoice(inv.id, { invoice_no: no.trim(), invoice_date: d, amount: a });
+      const ids = Object.keys(picked).filter((k) => picked[k]);
+      if (ids.sort().join() !== [...linked].sort().join()) await setInvoiceItems(inv.id, ids);
+      onDone();
+    } catch (e: any) { notify('Could not save', e.message); } finally { setBusy(false); }
+  }
+  async function remove() {
+    if (!confirmDel) return setConfirmDel(true);
+    setBusy(true);
+    try { await deleteInvoice(inv.id); onDone(true); } catch (e: any) { notify('Could not delete', e.message); } finally { setBusy(false); }
+  }
+  return (
+    <View style={{ gap: 6, marginTop: 6 }}>
+      <Field label="Invoice no." value={no} onChangeText={setNo} autoCapitalize="characters" />
+      <Field label="Invoice date" value={on} onChangeText={setOn} placeholder="31.12.2026" />
+      <Field label="Amount incl. GST (₹)" value={amt} onChangeText={setAmt} keyboardType="decimal-pad" />
+      <Muted>Items on this invoice</Muted>
+      {!job ? <Muted>Loading items…</Muted> : job.items.map((it) => (
+        <Toggle key={it.id} label={`${it.line_no}. ${it.description.slice(0, 60)}`} value={!!picked[it.id]} onChange={(v) => setPicked({ ...picked, [it.id]: v })} />
+      ))}
+      <Button title="Save changes" onPress={save} busy={busy} />
+      {hasPayments
+        ? <Muted>To delete this invoice, delete its payments first.</Muted>
+        : <Button title={confirmDel ? 'Tap again to delete this invoice' : 'Delete invoice'} kind="secondary" onPress={remove} busy={busy} />}
+      <Button title="Cancel" kind="secondary" onPress={() => onDone()} />
+    </View>
   );
 }

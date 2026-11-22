@@ -3,7 +3,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Screen, Section, Toggle } from '../../components/ui';
-import { addStageEvent, getItem, getStages, isCancelStage, itemStageText, REJECT_STAGE, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
+import { addStageEvent, deleteStageEvent, getItem, updateStageEvent, getStages, isCancelStage, itemStageText, REJECT_STAGE, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
@@ -15,7 +15,8 @@ type Mode = 'in_house' | 'job_work';
 
 export default function ItemDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { perms } = useAuth();
+  const { perms, session } = useAuth();
+  const [editing, setEditing] = useState<string | null>(null);
   const { data, error, loading, reload } = useQuery(async () => {
     const [{ item, events }, stages] = await Promise.all([getItem(id), getStages()]);
     return { item, events, stages };
@@ -38,6 +39,7 @@ export default function ItemDetail() {
       (s.optional_for === 'rectification' && data.item.needs_rectification));
   }, [data]);
 
+  const mayUpdateCode = (code: string) => { const s = data?.stages.find((x) => x.code === code); return s ? mayUpdate(s) : false; };
   const mayUpdate = (s: Stage) =>
     s.owner === 'production' ? perms.updateProductionStages : s.owner === 'mgmt' ? perms.manageJobs : perms.updateFinanceStages;
 
@@ -175,6 +177,11 @@ export default function ItemDetail() {
               {(e.created_by_name || e.profiles?.full_name) ? `  ·  by ${e.created_by_name || e.profiles?.full_name}` : ''}
             </Muted>
             {e.note ? <Text style={{ color: colors.text }}>{e.note}</Text> : null}
+            {e.edited_at ? <Muted>Edited{e.edited_by_name ? ` by ${e.edited_by_name}` : ''} on {date(e.edited_at.slice(0, 10))}</Muted> : null}
+            {editing === e.id
+              ? <EditEvent ev={e} onDone={() => { setEditing(null); reload(); }} />
+              : (perms.manageJobs || (e.created_by === session?.user.id && mayUpdateCode(e.stage_code))) &&
+                <Text style={styles.link} onPress={() => setEditing(e.id)}>Edit</Text>}
           </Card>
         ))}
       </Section>
@@ -182,7 +189,41 @@ export default function ItemDetail() {
   );
 }
 
+function EditEvent({ ev, onDone }: { ev: { id: string; status: string; note: string | null; happened_on: string; stage_code: string }; onDone: () => void }) {
+  const [st, setSt] = useState<Status>(ev.status as Status);
+  const [on, setOn] = useState(toUserDate(ev.happened_on));
+  const [note, setNote] = useState(ev.note ?? '');
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [busy, setBusy] = useState(false);
+  async function run(fn: () => Promise<void>) {
+    setBusy(true);
+    try { await fn(); onDone(); } catch (e: any) { notify('Could not save', e.message); } finally { setBusy(false); }
+  }
+  return (
+    <View style={{ gap: 6, marginTop: 6 }}>
+      {!isCancelStage(ev.stage_code) && ev.stage_code !== REJECT_STAGE && (
+        <Chips<Status> value={st} onChange={setSt} options={[
+          { value: 'in_progress', label: ev.stage_code === 'despatched' ? 'Part despatched' : 'Started' },
+          { value: 'done', label: ev.stage_code === 'despatched' ? 'Fully despatched' : 'Done' },
+          { value: 'skipped', label: 'Not needed' },
+        ]} />
+      )}
+      <Field label="Date" value={on} onChangeText={setOn} placeholder="31.12.2026" />
+      <Field label="Note" value={note} onChangeText={setNote} multiline />
+      <Button title="Save changes" busy={busy} onPress={() => {
+        const d = parseUserDate(on);
+        if (!d) return notify('Check the date', 'Use the format 31.12.2026');
+        run(() => updateStageEvent(ev.id, { status: st, happened_on: d, note: note.trim() || null }));
+      }} />
+      <Button title={confirmDel ? 'Tap again to delete this update' : 'Delete this update'} kind="secondary" busy={busy}
+        onPress={() => (confirmDel ? run(() => deleteStageEvent(ev.id)) : setConfirmDel(true))} />
+      <Button title="Cancel" kind="secondary" onPress={onDone} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  link: { color: colors.info, fontWeight: '600', marginTop: 4 },
   desc: { fontSize: 16, fontWeight: '600', color: colors.text },
   stageGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   stageBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
