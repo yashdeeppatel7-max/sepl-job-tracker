@@ -3,7 +3,7 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Screen, Section, Toggle } from '../../components/ui';
-import { addStageEvent, getItem, getStages, isCancelStage, itemStageText, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
+import { addStageEvent, getItem, getStages, isCancelStage, itemStageText, REJECT_STAGE, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
@@ -47,7 +47,7 @@ export default function ItemDetail() {
     const cur = data.stages.find((s) => s.code === data.item.current_stage);
     const startSeq = cur ? (data.item.current_status === 'in_progress' ? cur.seq - 1 : cur.seq) : -1;
     if (isCancelStage(data.item.current_stage)) return null;
-    return applicable.find((s) => s.seq > startSeq && !isCancelStage(s.code) && mayUpdate(s)) ?? null;
+    return applicable.find((s) => s.seq > startSeq && !isCancelStage(s.code) && s.code !== REJECT_STAGE && mayUpdate(s)) ?? null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, applicable]);
   const selected = stageCode ?? suggested?.code ?? null;
@@ -55,11 +55,16 @@ export default function ItemDetail() {
   if (error) return <Screen><ErrorBox message={error} /></Screen>;
   if (!data) return <Loading />;
   const { item, events, stages } = data;
-  const doneCodes = new Set(events.filter((e) => e.status !== 'in_progress').map((e) => e.stage_code));
+  // after a rejection only the new cycle counts as progress
+  const lastReject = events.filter((e) => e.stage_code === REJECT_STAGE).map((e) => e.created_at).sort().pop();
+  const cycle = lastReject ? events.filter((e) => e.created_at >= lastReject) : events;
+  const doneCodes = new Set(cycle.filter((e) => e.status !== 'in_progress' && e.stage_code !== REJECT_STAGE).map((e) => e.stage_code));
   const curSeq = stages.find((s) => s.code === item.current_stage)?.seq ?? -1;
   const canAnything = perms.updateProductionStages || perms.updateFinanceStages;
   const cancelled = isCancelStage(item.current_stage);
-  const cancelSelected = isCancelStage(selected);
+  const cancelSelected = isCancelStage(selected) || selected === REJECT_STAGE;
+  const curStage = stages.find((s) => s.code === item.current_stage);
+  const canReject = !cancelled && (curStage?.seq ?? 0) >= 130; // invoiced or later
 
   async function save() {
     if (!selected) return;
@@ -85,7 +90,7 @@ export default function ItemDetail() {
         <Text style={styles.desc}>{item.description}</Text>
         <Muted>{item.jobs.customers?.code}  ·  Code {item.item_code ?? '–'}  ·  Qty {item.qty} {item.unit}</Muted>
         <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-          <Pill label={itemStageText(stages, item.current_stage, item.current_status)} tone={cancelled ? 'bad' : 'info'} />
+          <Pill label={itemStageText(stages, item.current_stage, item.current_status)} tone={cancelled || item.current_stage === REJECT_STAGE ? 'bad' : 'info'} />
           {item.jobs.tpi_required && <Pill label="TPI" tone="warn" />}
           {item.needs_rectification && <Pill label="Rectification" tone="bad" />}
         </View>
@@ -100,15 +105,16 @@ export default function ItemDetail() {
           <Card>
             <Muted>Stage</Muted>
             <View style={styles.stageGrid}>
-              {applicable.filter(mayUpdate).map((s) => {
+              {applicable.filter(mayUpdate).filter((s) => s.code !== REJECT_STAGE || canReject).map((s) => {
                 const active = s.code === selected;
                 return (
-                  <Pressable key={s.code} onPress={() => setStageCode(s.code)} style={[styles.stageBtn, isCancelStage(s.code) && styles.cancelBtn, active && styles.stageBtnActive, active && isCancelStage(s.code) && styles.cancelBtnActive]}>
-                    <Text style={[styles.stageBtnText, isCancelStage(s.code) && { color: colors.bad }, active && { color: '#fff' }]}>{s.label}</Text>
+                  <Pressable key={s.code} onPress={() => setStageCode(s.code)} style={[styles.stageBtn, (isCancelStage(s.code) || s.code === REJECT_STAGE) && styles.cancelBtn, active && styles.stageBtnActive, active && (isCancelStage(s.code) || s.code === REJECT_STAGE) && styles.cancelBtnActive]}>
+                    <Text style={[styles.stageBtnText, (isCancelStage(s.code) || s.code === REJECT_STAGE) && { color: colors.bad }, active && { color: '#fff' }]}>{s.label}</Text>
                   </Pressable>
                 );
               })}
             </View>
+            {selected === REJECT_STAGE && <Text style={styles.warn}>The item goes back to the start (raw material ordered) and the PO reopens. Earlier updates stay in the history. Write the rejection reason in the note. Accounts can add the credit note from the job's Invoices section.</Text>}
             {selected === 'item_cancelled' && <Text style={styles.warn}>This item will be marked cancelled. Add the reason in the note (e.g. drawing mismatch).</Text>}
             {selected === 'po_cancelled' && <Text style={styles.warn}>The whole PO {item.jobs.job_no} will be short-closed: every item is marked cancelled and the job becomes Cancelled.</Text>}
             {!cancelSelected && (
@@ -137,7 +143,8 @@ export default function ItemDetail() {
 
       <Section title="Progress">
         <Card>
-          {applicable.filter((s) => !isCancelStage(s.code) || s.code === item.current_stage).map((s) => {
+          {lastReject && <Text style={styles.warn}>Rework after customer rejection on {date(events.find((e) => e.created_at === lastReject)?.happened_on ?? null)}</Text>}
+          {applicable.filter((s) => s.code !== REJECT_STAGE && (!isCancelStage(s.code) || s.code === item.current_stage)).map((s) => {
             const done = doneCodes.has(s.code) || (!cancelled && s.seq < curSeq);
             const current = s.code === item.current_stage && item.current_status === 'in_progress';
             return (
@@ -160,7 +167,7 @@ export default function ItemDetail() {
           <Card key={e.id}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.sm }}>
               <Text style={{ fontWeight: '600', color: colors.text, flex: 1 }}>{stageLabel(stages, e.stage_code)}</Text>
-              <Pill label={isCancelStage(e.stage_code) ? 'Cancelled' : e.stage_code === 'despatched' && e.status === 'in_progress' ? 'Part' : e.status === 'done' ? 'Done' : e.status === 'in_progress' ? 'Started' : 'Not needed'} tone={isCancelStage(e.stage_code) ? 'bad' : e.status === 'done' ? 'good' : e.status === 'in_progress' ? 'info' : 'neutral'} />
+              <Pill label={e.stage_code === REJECT_STAGE ? 'Rejected' : isCancelStage(e.stage_code) ? 'Cancelled' : e.stage_code === 'despatched' && e.status === 'in_progress' ? 'Part' : e.status === 'done' ? 'Done' : e.status === 'in_progress' ? 'Started' : 'Not needed'} tone={isCancelStage(e.stage_code) || e.stage_code === REJECT_STAGE ? 'bad' : e.status === 'done' ? 'good' : e.status === 'in_progress' ? 'info' : 'neutral'} />
             </View>
             <Muted>
               {date(e.happened_on)}

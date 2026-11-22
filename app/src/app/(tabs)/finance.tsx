@@ -79,7 +79,7 @@ function InvoiceCard({ inv }: { inv: InvoiceRow }) {
     <Card onPress={() => router.push(`/invoice/${inv.id}`)}>
       <View style={styles.head}>
         <Text style={styles.strong}>Inv {inv.invoice_no}</Text>
-        <Pill label={inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={tone} />
+        <Pill label={(inv.amount ?? 0) < 0 ? 'Credit note' : inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={tone} />
       </View>
       <Muted>{inv.customer_code}  ·  Job {inv.job_no}  ·  {date(inv.invoice_date)}</Muted>
       <View style={styles.head}>

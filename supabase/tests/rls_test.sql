@@ -214,6 +214,29 @@ insert into pg_temp.results values ('everyone sees updater names',
   exists (select 1 from stage_events where created_by_name = 'Incharge'));
 reset role;
 
+-- ---------- Rejected after despatch ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-5000","line_no":1,"customer":"GNFC","description":"REJECT ME","qty":1,"invoices":[{"no":"26/500","date":"2026-10-01"}],"status_text":"Complete"}]'::jsonb);
+insert into stage_events (line_item_id, stage_code, status, note, happened_on)
+  select id, 'rejected', 'done', 'Customer rejected: OD undersize', '2026-11-10' from line_items where description = 'REJECT ME';
+select public.import_po_rows('[{"job_no":"26-5000","line_no":1,"customer":"GNFC","description":"REJECT ME","qty":1,"invoices":[{"no":"26/500","date":"2026-10-01"}],"status_text":"Complete"}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('rejection restarts item and reopens PO, old sheet invoice ignored',
+  (select current_stage from line_items where description = 'REJECT ME') = 'rejected'
+  and (select status from jobs where job_no = '26-5000') = 'in_progress');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
+insert into stage_events (line_item_id, stage_code, status) select id, 'rm_ordered', 'done' from line_items where description = 'REJECT ME';
+reset role;
+insert into pg_temp.results values ('new cycle continues from RM ordered',
+  (select current_stage from line_items where description = 'REJECT ME') = 'rm_ordered');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-5000","line_no":1,"customer":"GNFC","description":"REJECT ME","qty":1,"invoices":[{"no":"26/500","date":"2026-10-01"},{"no":"26/600","date":"2026-12-01"}],"status_text":"Complete"}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('new invoice after rejection = despatched again',
+  (select current_stage from line_items where description = 'REJECT ME') = 'despatched'
+  and (select status from jobs where job_no = '26-5000') = 'completed'
+  and (select count(*) from stage_events e join line_items li on li.id = e.line_item_id where li.description = 'REJECT ME') = 6);
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed

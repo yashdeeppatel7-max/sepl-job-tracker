@@ -94,7 +94,7 @@ export default function JobDetail() {
             <Card key={inv.id} onPress={() => router.push(`/invoice/${inv.id}`)}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ fontWeight: '600', color: colors.text }}>{inv.invoice_no}  ·  {date(inv.invoice_date)}</Text>
-                <Pill label={inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad'} />
+                <Pill label={(inv.amount ?? 0) < 0 ? 'Credit note' : inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad'} />
               </View>
               <Muted>{money(inv.amount)}  ·  received {money(inv.paid_amount)}</Muted>
             </Card>

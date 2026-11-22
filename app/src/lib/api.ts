@@ -57,6 +57,8 @@ export async function getStages(): Promise<Stage[]> {
 }
 /** Item cancelled / PO cancelled: recorded by Director, CEO or Admin only. */
 export const CANCEL_STAGES = ['item_cancelled', 'po_cancelled'];
+/** Customer rejected the item after despatch: work starts again from raw material. */
+export const REJECT_STAGE = 'rejected';
 export const isCancelStage = (code: string | null | undefined) => !!code && CANCEL_STAGES.includes(code);
 
 /** Label for an item's current stage; a despatch marked Started reads "Part despatched". */
@@ -203,11 +205,14 @@ export async function addPayment(invoice_id: string, amount: number, paid_on: st
 }
 
 /** Creates an invoice for some items of a job and marks them "Invoice prepared". */
-export async function createInvoice(job_id: string, invoice_no: string, invoice_date: string, itemIds: string[], amount: number | null) {
-  const inv = must(await supabase.from('invoices').insert({ job_id, invoice_no: invoice_no.trim(), invoice_date, amount }).select('id').single()) as { id: string };
+export async function createInvoice(job_id: string, invoice_no: string, invoice_date: string, itemIds: string[], amount: number | null, creditNote = false) {
+  const amt = creditNote && amount != null ? -Math.abs(amount) : amount;
+  const row: Record<string, unknown> = { job_id, invoice_no: invoice_no.trim(), invoice_date, amount: amt };
+  if (creditNote) row.is_credit_note = true;
+  const inv = must(await supabase.from('invoices').insert(row).select('id').single()) as { id: string };
   if (itemIds.length) {
     must(await supabase.from('invoice_items').insert(itemIds.map((line_item_id) => ({ invoice_id: inv.id, line_item_id }))).select('invoice_id'));
-    for (const id of itemIds) await addStageEvent({ line_item_id: id, stage_code: 'invoiced', status: 'done', mode: 'in_house', happened_on: invoice_date, note: `Invoice ${invoice_no}` });
+    if (!creditNote) for (const id of itemIds) await addStageEvent({ line_item_id: id, stage_code: 'invoiced', status: 'done', mode: 'in_house', happened_on: invoice_date, note: `Invoice ${invoice_no}` });
   }
   return inv.id;
 }

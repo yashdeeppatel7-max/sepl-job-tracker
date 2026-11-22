@@ -47,7 +47,7 @@ export default function InvoiceDetail() {
       <Card>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>{inv.customer_code}  ·  {inv.job_no}</Text>
-          <Pill label={inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad'} />
+          <Pill label={(inv.amount ?? 0) < 0 ? 'Credit note' : inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad'} />
         </View>
         <Row label="Invoice date" value={date(inv.invoice_date)} />
         <Row label="Amount (incl. GST)" value={money(inv.amount)} />

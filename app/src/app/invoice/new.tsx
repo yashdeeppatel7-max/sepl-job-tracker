@@ -18,6 +18,7 @@ export default function NewInvoice() {
   const [on, setOn] = useState(toUserDate(todayIso()));
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [amount, setAmount] = useState<string | null>(null);
+  const [credit, setCredit] = useState(false);
   const [busy, setBusy] = useState(false);
 
   if (error) return <Screen><ErrorBox message={error} /></Screen>;
@@ -32,7 +33,7 @@ export default function NewInvoice() {
     const a = amount == null || amount === '' ? suggested || null : parseNumber(amount);
     setBusy(true);
     try {
-      await createInvoice(jobId, no, d, ids, a);
+      await createInvoice(jobId, no, d, ids, a, credit);
       router.back();
     } catch (e: any) { notify('Could not save', e.message); } finally { setBusy(false); }
   }
@@ -41,7 +42,8 @@ export default function NewInvoice() {
     <Screen>
       <Card>
         <Text style={{ fontWeight: '700', fontSize: 16 }}>Job {data.job.job_no}  ·  {data.job.customers?.code}</Text>
-        <Field label="Invoice no." value={no} onChangeText={setNo} placeholder="26/071" autoCapitalize="characters" />
+        <Toggle label="This is a credit note (item rejected / returned)" value={credit} onChange={setCredit} />
+        <Field label={credit ? 'Credit note no.' : 'Invoice no.'} value={no} onChangeText={setNo} placeholder={credit ? 'CR-14' : '26/071'} autoCapitalize="characters" />
         <Field label="Invoice date" value={on} onChangeText={setOn} placeholder="31.12.2026" />
       </Card>
       <Section title="Items on this invoice">
@@ -53,8 +55,8 @@ export default function NewInvoice() {
       </Section>
       <Card>
         <Field label="Amount incl. GST (₹)" value={amount ?? ''} onChangeText={setAmount} keyboardType="decimal-pad" placeholder={suggested ? String(Math.round(suggested)) : ''} hint={suggested ? `From item values: ${money(suggested)}` : undefined} />
-        <Muted>Selected items will move to "Invoice prepared".</Muted>
-        <Button title="Create invoice" onPress={save} busy={busy} />
+        <Muted>{credit ? 'The amount is taken off what the customer owes. Enter it without a minus sign.' : 'Selected items will move to "Invoice prepared".'}</Muted>
+        <Button title={credit ? 'Save credit note' : 'Create invoice'} onPress={save} busy={busy} />
       </Card>
     </Screen>
   );
