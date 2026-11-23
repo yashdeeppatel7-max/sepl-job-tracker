@@ -83,7 +83,7 @@ export default function Jobs() {
   );
   const overdue = shown.filter((j) => j.overdue).length;
 
-  const periodOptions = [...(perms.manageJobs ? [{ value: REP, label: REP_C_ANANT }] : []), { value: LATEST, label: 'Latest updated' }, { value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y }))];
+  const periodOptions = [{ value: LATEST, label: 'Latest updated' }, { value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y })), ...(perms.manageJobs ? [{ value: REP, label: REP_C_ANANT }] : [])];
   const filterOptions: { value: Filter; label: string }[] = [
     { value: 'total', label: `Total PO received (${counts.total})` },
     { value: 'open', label: `Open PO (${counts.open})` },
