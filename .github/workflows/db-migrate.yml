@@ -1,0 +1,52 @@
+# Applies new database changes (supabase/migrations/*.sql) to Supabase automatically
+# whenever they are pushed to main. Needs one repository secret: SUPABASE_DB_URL
+# (Supabase → Connect → Session pooler connection string, with the database password).
+name: Apply database changes
+on:
+  push:
+    branches: [main]
+    paths: ['supabase/migrations/**.sql']
+  workflow_dispatch:
+    inputs:
+      file:
+        description: 'Migration file to (re)apply, e.g. supabase/migrations/0013_job_reps.sql'
+        required: true
+concurrency: db-migrate
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the secret is set
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then echo "::error::Add the SUPABASE_DB_URL secret (see README)"; exit 1; fi
+      - name: Pick files
+        id: files
+        env:
+          INPUT_FILE: ${{ github.event.inputs.file }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          if [ -n "$INPUT_FILE" ]; then
+            printf '%s\n' "$INPUT_FILE" > files.txt
+          elif [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            : > files.txt
+          else
+            git diff --name-only --diff-filter=AM "$BEFORE" "$AFTER" -- 'supabase/migrations/*.sql' | sort > files.txt
+          fi
+          echo "Files to apply:"; cat files.txt
+      - name: Apply
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          sudo apt-get -qq update && sudo apt-get -qq install -y postgresql-client >/dev/null
+          while read -r f; do
+            [ -f "$f" ] || { echo "::error::No such file: $f"; exit 1; }
+            case "$f" in supabase/migrations/*.sql) ;; *) echo "::error::Only migration files can be applied"; exit 1;; esac
+            echo "== $f"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -f "$f"
+          done < files.txt

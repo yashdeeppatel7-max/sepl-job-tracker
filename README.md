@@ -87,3 +87,6 @@ The PO Google Sheet can push itself to the app every hour (plus **SEPL App → S
 - `supabase/migrations/0003_sheet_sync.sql`: lets the sync function import; adds `sync_log`.
 - `supabase/functions/sync-sheet/`: receives the workbook, parses it with the same parser as the app, imports it. Generated as one file by `node scripts/build-sync-function.mjs` (edit `handler.ts.txt` or the app parser, then rebuild). Needs the `SYNC_SECRET` function secret and "Verify JWT" off.
 - `google-sheet/Code.gs`: the Apps Script to paste into the sheet (put the same `SYNC_SECRET` in it).
+
+## Automatic database changes
+`.github/workflows/db-migrate.yml` applies any new or changed file in `supabase/migrations/` to Supabase when it is pushed to `main` (each file in one transaction; files are written to be safe to run again). It can also re-apply one file from **Actions → Apply database changes → Run workflow**. One-time setup: add the repository secret `SUPABASE_DB_URL` = Supabase **Connect → Session pooler** connection string with the database password filled in.
