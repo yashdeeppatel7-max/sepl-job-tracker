@@ -38,6 +38,7 @@ export default function Jobs() {
   const [period, setPeriod] = useState<string>(ALL_OPEN);
   const [filter, setFilter] = useState<Filter>('total');
   const [q, setQ] = useState('');
+  const [openPo, setOpenPo] = useState<string | null>(null);
   const { data, error, loading, reload } = useQuery(async () => {
     const [jobs, values, stages, recent] = await Promise.all([listJobs(), perms.seeMoney ? listJobValues() : Promise.resolve({}), getStages(), listRecentUpdates(15)]);
     return { jobs, values: values as Record<string, number>, stages, recent };
@@ -111,18 +112,18 @@ export default function Jobs() {
       {error && <View style={{ padding: space.md }}><ErrorBox message={error} /></View>}
       {loading && !data ? <Loading /> : period === LATEST ? (
         <FlatList
-          data={(data?.recent ?? []).filter((u) => {
+          data={groupByPo((data?.recent ?? []).filter((u) => {
             const term = q.trim().toLowerCase();
             if (!term) return true;
             const j = u.line_items?.jobs;
             return [j?.job_no, j?.customers?.code, u.created_by_name, u.line_items?.description].some((v) => v?.toLowerCase().includes(term));
-          })}
-          keyExtractor={(u) => u.id}
+          }))}
+          keyExtractor={(g) => g.jobId}
           contentContainerStyle={{ padding: space.md, paddingTop: 0, gap: space.sm }}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
-          ListHeaderComponent={<Muted>Updates made in the app in the last 15 days, newest first.</Muted>}
+          ListHeaderComponent={<Muted>POs updated in the app in the last 15 days, newest first. Tap a PO to see its items.</Muted>}
           ListEmptyComponent={<Empty text="No updates in the last 15 days." />}
-          renderItem={({ item }) => <UpdateCard u={item} stages={data!.stages} />}
+          renderItem={({ item }) => <PoUpdates g={item} stages={data!.stages} open={openPo === item.jobId} onToggle={() => setOpenPo(openPo === item.jobId ? null : item.jobId)} />}
         />
       ) : (
         <FlatList
@@ -183,29 +184,55 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12, color: colors.textMuted },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surface, borderRadius: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border },
   searchInput: { flex: 1, paddingVertical: 10, fontSize: 15, color: colors.text },
-  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  subRow: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, marginTop: 4, gap: 2 },
   jobNo: { fontSize: 17, fontWeight: '700', color: colors.text },
   customer: { fontSize: 15, color: colors.text, fontWeight: '500' },
   cardFoot: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md, marginTop: 4 },
   value: { fontSize: 15, fontWeight: '700', color: colors.primary },
 });
 
-function UpdateCard({ u, stages }: { u: RecentUpdate; stages: { code: string; seq: number; label: string; owner: any; optional_for: any }[] }) {
-  const j = u.line_items?.jobs;
-  const bad = isCancelStage(u.stage_code) || u.stage_code === REJECT_STAGE;
+type PoGroup = { jobId: string; jobNo: string; customer: string; updates: RecentUpdate[] };
+function groupByPo(list: RecentUpdate[]): PoGroup[] {
+  const map = new Map<string, PoGroup>();
+  for (const u of list) {           // list is newest first, so groups come out newest first
+    const j = u.line_items?.jobs;
+    if (!j) continue;
+    if (!map.has(j.id)) map.set(j.id, { jobId: j.id, jobNo: j.job_no, customer: j.customers?.code ?? '', updates: [] });
+    map.get(j.id)!.updates.push(u);
+  }
+  return [...map.values()];
+}
+
+function PoUpdates({ g, stages, open, onToggle }: { g: PoGroup; stages: any[]; open: boolean; onToggle: () => void }) {
+  const latest = g.updates[0];
+  const items = new Set(g.updates.map((u) => u.line_items?.id)).size;
+  const people = [...new Set(g.updates.map((u) => u.created_by_name).filter(Boolean))].join(', ');
   return (
-    <Card onPress={() => u.line_items && router.push(`/item/${u.line_items.id}`)}>
+    <Card onPress={onToggle}>
       <View style={styles.cardHead}>
-        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{j?.job_no ?? '–'}  ·  {j?.customers?.code ?? ''}</Text>
-        <Pill label={itemStageText(stages as any, u.stage_code, u.status)} tone={bad ? 'bad' : u.status === 'done' ? 'good' : 'info'} />
+        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{g.jobNo}  ·  {g.customer}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
       </View>
-      <Text style={{ color: colors.text }}>{u.line_items ? `${u.line_items.line_no}. ${u.line_items.description}` : ''}</Text>
-      <Muted>
-        {u.created_by_name ? `by ${u.created_by_name}` : 'by someone'}  ·  {date(u.happened_on)}
-        {u.mode === 'job_work' ? `  ·  Job work${u.vendors ? `: ${u.vendors.name}` : ''}` : ''}
-      </Muted>
-      {u.note ? <Text style={{ color: colors.text }}>{u.note}</Text> : null}
-      {u.edited_at ? <Muted>Edited{u.edited_by_name ? ` by ${u.edited_by_name}` : ''}</Muted> : null}
+      <Text style={{ color: colors.text }}>Item status updated  ·  {items} item{items === 1 ? '' : 's'}, {g.updates.length} update{g.updates.length === 1 ? '' : 's'}</Text>
+      <Muted>Last: {date(latest.happened_on)}{people ? `  ·  by ${people}` : ''}</Muted>
+      {open && g.updates.map((u) => {
+        const bad = isCancelStage(u.stage_code) || u.stage_code === REJECT_STAGE;
+        return (
+          <Pressable key={u.id} onPress={() => u.line_items && router.push(`/item/${u.line_items.id}`)} style={styles.subRow}>
+            <View style={styles.cardHead}>
+              <Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>{u.line_items ? `${u.line_items.line_no}. ${u.line_items.description}` : ''}</Text>
+              <Pill label={itemStageText(stages, u.stage_code, u.status)} tone={bad ? 'bad' : u.status === 'done' ? 'good' : 'info'} />
+            </View>
+            <Muted>
+              {u.created_by_name ? `by ${u.created_by_name}` : 'by someone'}  ·  {date(u.happened_on)}
+              {u.mode === 'job_work' ? `  ·  Job work${u.vendors ? `: ${u.vendors.name}` : ''}` : ''}
+              {u.edited_at ? `  ·  edited${u.edited_by_name ? ` by ${u.edited_by_name}` : ''}` : ''}
+            </Muted>
+            {u.note ? <Text style={{ color: colors.text }}>{u.note}</Text> : null}
+          </Pressable>
+        );
+      })}
     </Card>
   );
 }
