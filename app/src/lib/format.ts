@@ -20,6 +20,22 @@ export function date(iso: string | null | undefined) {
   return `${d} ${MONTHS[m - 1]} ${y}`;
 }
 
+/** "23 Nov 2026 at 18:34" in the phone's local time, from a timestamp. */
+export function dateTime(ts: string | null | undefined) {
+  if (!ts) return '–';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '–';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} at ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+/** Work date of an update, plus when it was entered: "23 Nov 2026 at 18:34", or "21 Nov 2026 (entered 23 Nov 2026 at 18:34)". */
+export function workAndEntry(happenedOn: string | null | undefined, createdAt: string | null | undefined) {
+  if (!createdAt) return date(happenedOn);
+  const entered = dateTime(createdAt);
+  if (!happenedOn) return entered;
+  return entered.startsWith(date(happenedOn) + ' at') ? entered : `${date(happenedOn)} (entered ${entered})`;
+}
+
 export const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

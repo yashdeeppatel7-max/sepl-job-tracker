@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Screen, Section, Toggle } from '../../components/ui';
 import { addStageEvent, deleteStageEvent, getItem, updateStageEvent, getStages, isCancelStage, itemStageText, REJECT_STAGE, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { date, parseUserDate, todayIso, toUserDate } from '../../lib/format';
+import { date, parseUserDate, todayIso, toUserDate, workAndEntry } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors, space } from '../../theme';
 import { notify } from '../../lib/notify';
@@ -172,7 +172,7 @@ export default function ItemDetail() {
               <Pill label={e.stage_code === REJECT_STAGE ? 'Rejected' : isCancelStage(e.stage_code) ? 'Cancelled' : e.stage_code === 'despatched' && e.status === 'in_progress' ? 'Part' : e.status === 'done' ? 'Done' : e.status === 'in_progress' ? 'Started' : 'Not needed'} tone={isCancelStage(e.stage_code) || e.stage_code === REJECT_STAGE ? 'bad' : e.status === 'done' ? 'good' : e.status === 'in_progress' ? 'info' : 'neutral'} />
             </View>
             <Muted>
-              {date(e.happened_on)}
+              {workAndEntry(e.happened_on, e.created_at)}
               {e.mode === 'job_work' ? `  ·  Job work${e.vendors ? `: ${e.vendors.name}` : ''}` : ''}
               {(e.created_by_name || e.profiles?.full_name) ? `  ·  by ${e.created_by_name || e.profiles?.full_name}` : ''}
             </Muted>

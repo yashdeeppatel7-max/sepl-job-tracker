@@ -5,7 +5,7 @@ import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View 
 import { Card, Chips, Empty, ErrorBox, Loading, Muted, Pill, ProgressBar } from '../../components/ui';
 import { getStages, isCancelStage, itemStageText, JOB_STATUS_LABEL, listJobs, listJobValues, listJobReps, listRecentUpdates, REJECT_STAGE, REP_C_ANANT, type JobRow, type RecentUpdate } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { date, moneyShort } from '../../lib/format';
+import { date, moneyShort, workAndEntry } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors, space } from '../../theme';
 
@@ -220,7 +220,7 @@ function PoUpdates({ g, stages, open, onToggle }: { g: PoGroup; stages: any[]; o
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
       </View>
       <Text style={{ color: colors.text }}>Item status updated  ·  {items} item{items === 1 ? '' : 's'}, {g.updates.length} update{g.updates.length === 1 ? '' : 's'}</Text>
-      <Muted>Last: {date(latest.happened_on)}{people ? `  ·  by ${people}` : ''}</Muted>
+      <Muted>Last: {workAndEntry(latest.happened_on, latest.created_at)}{people ? `  ·  by ${people}` : ''}</Muted>
       {open && g.updates.map((u) => {
         const bad = isCancelStage(u.stage_code) || u.stage_code === REJECT_STAGE;
         return (
@@ -230,7 +230,7 @@ function PoUpdates({ g, stages, open, onToggle }: { g: PoGroup; stages: any[]; o
               <Pill label={itemStageText(stages, u.stage_code, u.status)} tone={bad ? 'bad' : u.status === 'done' ? 'good' : 'info'} />
             </View>
             <Muted>
-              {u.created_by_name ? `by ${u.created_by_name}` : 'by someone'}  ·  {date(u.happened_on)}
+              {u.created_by_name ? `by ${u.created_by_name}` : 'by someone'}  ·  {workAndEntry(u.happened_on, u.created_at)}
               {u.mode === 'job_work' ? `  ·  Job work${u.vendors ? `: ${u.vendors.name}` : ''}` : ''}
               {u.edited_at ? `  ·  edited${u.edited_by_name ? ` by ${u.edited_by_name}` : ''}` : ''}
             </Muted>
