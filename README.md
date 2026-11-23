@@ -27,7 +27,7 @@ app/                            Expo (React Native) app, Expo Router screens in 
 
 ## Process stages
 
-Each item moves through: Raw material ordered → Raw material received → Raw material testing → *TPI witness of RM testing* → Proof machining → Final lathe → Drilling / keyway / other ops → DP / other testing → *Defect rectification* → Grinding / final CNC finish → Balancing / final activity → Dimensional check → *TPI inspection* → Customer approval → Invoice prepared → Despatched → Documents sent → Payment received.
+Each item moves through: Pattern started → Pattern sent to casting → Raw material ordered → Raw material received → Raw material testing → *TPI witness of RM testing* → Proof machining → Final lathe → Drilling / keyway / other ops → DP / other testing → *Defect rectification* → Grinding / final CNC finish → Balancing / final activity → Dimensional check → *TPI inspection* → Customer approval → Invoice prepared → Despatched → Documents sent → Payment received.
 
 Stages in *italics* only show when the job needs TPI or the item is flagged for rectification. Every production stage can be marked in-house or job work (with vendor name). Enquiry, quotation and PO received are job statuses. Stages are rows in the `stages` table, so adding or renaming one is a one-line change.
 
