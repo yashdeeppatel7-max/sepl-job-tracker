@@ -3,16 +3,17 @@ import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Card, Chips, Empty, ErrorBox, Loading, Muted, Pill, ProgressBar } from '../../components/ui';
-import { getStages, JOB_STATUS_LABEL, listJobs, listJobValues, type JobRow } from '../../lib/api';
+import { getStages, isCancelStage, itemStageText, JOB_STATUS_LABEL, listJobs, listJobValues, listRecentUpdates, REJECT_STAGE, type JobRow, type RecentUpdate } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, moneyShort } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors, space } from '../../theme';
 
 type Filter = 'total' | 'open' | 'ongoing' | 'tpi' | 'completed';
+const LATEST = 'latest';
 const ALL_OPEN = 'all-open';
 const ALL_ONGOING = 'all-ongoing';
-const isAll = (p: string) => p === ALL_OPEN || p === ALL_ONGOING;
+const isAll = (p: string) => p === ALL_OPEN || p === ALL_ONGOING || p === LATEST;
 
 /** Job no. 26-1012 → FY26-27 (job numbers restart each financial year). */
 export function fyOf(jobNo: string) {
@@ -38,8 +39,8 @@ export default function Jobs() {
   const [filter, setFilter] = useState<Filter>('total');
   const [q, setQ] = useState('');
   const { data, error, loading, reload } = useQuery(async () => {
-    const [jobs, values, stages] = await Promise.all([listJobs(), perms.seeMoney ? listJobValues() : Promise.resolve({}), getStages()]);
-    return { jobs, values: values as Record<string, number>, stages };
+    const [jobs, values, stages, recent] = await Promise.all([listJobs(), perms.seeMoney ? listJobValues() : Promise.resolve({}), getStages(), listRecentUpdates(15)]);
+    return { jobs, values: values as Record<string, number>, stages, recent };
   }, [role]);
 
   const years = useMemo(() => {
@@ -76,7 +77,7 @@ export default function Jobs() {
   );
   const overdue = shown.filter((j) => j.overdue).length;
 
-  const periodOptions = [{ value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y }))];
+  const periodOptions = [{ value: LATEST, label: 'Latest updated' }, { value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y }))];
   const filterOptions: { value: Filter; label: string }[] = [
     { value: 'total', label: `Total PO received (${counts.total})` },
     { value: 'open', label: `Open PO (${counts.open})` },
@@ -97,18 +98,33 @@ export default function Jobs() {
       <View style={styles.top}>
         <Chips options={periodOptions} value={period} onChange={(v) => { setPeriod(v); setFilter('total'); }} />
         {!isAll(period) && <Chips options={filterOptions} value={filter} onChange={setFilter} />}
-        <View style={styles.stats}>
+        {period !== LATEST && <View style={styles.stats}>
           <Stat label={period === ALL_OPEN ? 'Open POs, all years' : period === ALL_ONGOING ? 'Ongoing POs, all years' : 'POs shown'} value={String(shown.length)} />
           <Stat label="Overdue" value={String(overdue)} tone={overdue ? colors.bad : undefined} />
           {periodTotal != null && <Stat label="Value incl. GST" value={moneyShort(periodTotal)} />}
-        </View>
+        </View>}
         <View style={styles.search}>
           <Ionicons name="search" size={18} color={colors.textFaint} />
           <TextInput value={q} onChangeText={setQ} placeholder="Job no, customer or PO no" placeholderTextColor={colors.textFaint} style={styles.searchInput} autoCapitalize="none" />
         </View>
       </View>
       {error && <View style={{ padding: space.md }}><ErrorBox message={error} /></View>}
-      {loading && !data ? <Loading /> : (
+      {loading && !data ? <Loading /> : period === LATEST ? (
+        <FlatList
+          data={(data?.recent ?? []).filter((u) => {
+            const term = q.trim().toLowerCase();
+            if (!term) return true;
+            const j = u.line_items?.jobs;
+            return [j?.job_no, j?.customers?.code, u.created_by_name, u.line_items?.description].some((v) => v?.toLowerCase().includes(term));
+          })}
+          keyExtractor={(u) => u.id}
+          contentContainerStyle={{ padding: space.md, paddingTop: 0, gap: space.sm }}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+          ListHeaderComponent={<Muted>Updates made in the app in the last 15 days, newest first.</Muted>}
+          ListEmptyComponent={<Empty text="No updates in the last 15 days." />}
+          renderItem={({ item }) => <UpdateCard u={item} stages={data!.stages} />}
+        />
+      ) : (
         <FlatList
           data={shown}
           keyExtractor={(j) => j.id}
@@ -173,3 +189,23 @@ const styles = StyleSheet.create({
   cardFoot: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md, marginTop: 4 },
   value: { fontSize: 15, fontWeight: '700', color: colors.primary },
 });
+
+function UpdateCard({ u, stages }: { u: RecentUpdate; stages: { code: string; seq: number; label: string; owner: any; optional_for: any }[] }) {
+  const j = u.line_items?.jobs;
+  const bad = isCancelStage(u.stage_code) || u.stage_code === REJECT_STAGE;
+  return (
+    <Card onPress={() => u.line_items && router.push(`/item/${u.line_items.id}`)}>
+      <View style={styles.cardHead}>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }}>{j?.job_no ?? '–'}  ·  {j?.customers?.code ?? ''}</Text>
+        <Pill label={itemStageText(stages as any, u.stage_code, u.status)} tone={bad ? 'bad' : u.status === 'done' ? 'good' : 'info'} />
+      </View>
+      <Text style={{ color: colors.text }}>{u.line_items ? `${u.line_items.line_no}. ${u.line_items.description}` : ''}</Text>
+      <Muted>
+        {u.created_by_name ? `by ${u.created_by_name}` : 'by someone'}  ·  {date(u.happened_on)}
+        {u.mode === 'job_work' ? `  ·  Job work${u.vendors ? `: ${u.vendors.name}` : ''}` : ''}
+      </Muted>
+      {u.note ? <Text style={{ color: colors.text }}>{u.note}</Text> : null}
+      {u.edited_at ? <Muted>Edited{u.edited_by_name ? ` by ${u.edited_by_name}` : ''}</Muted> : null}
+    </Card>
+  );
+}

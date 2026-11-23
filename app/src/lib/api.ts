@@ -146,11 +146,28 @@ export async function createJob(j: NewJob): Promise<string> {
 }
 
 // ---------- items & stages ----------
+export type RecentUpdate = {
+  id: string; stage_code: string; status: string; mode: string; note: string | null; happened_on: string; created_at: string;
+  created_by_name: string | null; edited_at: string | null; edited_by_name: string | null; vendors: { name: string } | null;
+  line_items: { id: string; line_no: number; description: string; jobs: { id: string; job_no: string; customers: { code: string } | null } } | null;
+};
+/** Stage updates made by people in the last `days` days, newest first. Finance stages (invoice, payment) are left out. */
+export async function listRecentUpdates(days = 15): Promise<RecentUpdate[]> {
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+  return must(await supabase.from('stage_events')
+    .select('*, vendors(name), line_items(id, line_no, description, jobs(id, job_no, customers(code)))')
+    .not('created_by', 'is', null)
+    .not('stage_code', 'in', '(invoiced,payment_received)')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(500)) as unknown as RecentUpdate[];
+}
+
 export async function getItem(id: string) {
   const item = must(await supabase.from('line_items').select('*, jobs(id, job_no, tpi_required, customers(code))').eq('id', id).single()) as
     LineItem & { jobs: { id: string; job_no: string; tpi_required: boolean; customers: { code: string } | null } };
   const events = must(await supabase.from('stage_events')
-    .select('id, stage_code, status, mode, note, happened_on, created_at, vendors(name), profiles:created_by(full_name)')
+    .select('*, vendors(name), profiles:created_by(full_name)')
     .eq('line_item_id', id).order('created_at', { ascending: false })) as unknown as StageEvent[];
   return { item, events };
 }
