@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section, Title, Toggle } from '../../components/ui';
 import {
-  getJob, getJobFinance, getStages, isCancelStage, itemStageText, JOB_STATUS_LABEL, updateJob, type JobStatus,
+  getJob, getJobFinance, getStages, listJobReps, REP_C_ANANT, setJobRep, isCancelStage, itemStageText, JOB_STATUS_LABEL, updateJob, type JobStatus,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, money, parseUserDate, toUserDate } from '../../lib/format';
@@ -28,8 +28,9 @@ export default function JobDetail() {
   const { data, error, loading, reload } = useQuery(async () => {
     const [{ job, items }, stages] = await Promise.all([getJob(id), getStages()]);
     const fin = perms.seeMoney ? await getJobFinance(id, items.map((i) => i.id)) : null;
-    return { job, items, stages, fin };
-  }, [id, perms.seeMoney]);
+    const reps = perms.manageJobs ? await listJobReps() : {};
+    return { job, items, stages, fin, rep: reps[id] ?? null };
+  }, [id, perms.seeMoney, perms.manageJobs]);
 
   if (error) return <Screen><ErrorBox message={error} /></Screen>;
   if (!data) return <Loading />;
@@ -53,6 +54,10 @@ export default function JobDetail() {
         <Row label="Third-party inspection" value={job.tpi_required ? `Yes${job.tpi_agency ? ` (${job.tpi_agency})` : ''}` : 'No'} />
         {job.qap_ref ? <Row label="QAP" value={job.qap_ref} /> : null}
         {job.remarks ? <Muted>{job.remarks}</Muted> : null}
+        {perms.manageJobs && (
+          <Toggle label={`For representative: ${REP_C_ANANT}`} value={data.rep === REP_C_ANANT}
+            onChange={async (v) => { try { await setJobRep(job.id, v ? REP_C_ANANT : null); reload(); } catch (e: any) { notify('Could not save', e.message); } }} />
+        )}
         {perms.manageJobs && !editing && <Button title="Edit job" kind="secondary" onPress={() => setEditing(true)} />}
       </Card>
 

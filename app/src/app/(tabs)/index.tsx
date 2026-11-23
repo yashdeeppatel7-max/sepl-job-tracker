@@ -3,7 +3,7 @@ import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Card, Chips, Empty, ErrorBox, Loading, Muted, Pill, ProgressBar } from '../../components/ui';
-import { getStages, isCancelStage, itemStageText, JOB_STATUS_LABEL, listJobs, listJobValues, listRecentUpdates, REJECT_STAGE, type JobRow, type RecentUpdate } from '../../lib/api';
+import { getStages, isCancelStage, itemStageText, JOB_STATUS_LABEL, listJobs, listJobValues, listJobReps, listRecentUpdates, REJECT_STAGE, REP_C_ANANT, type JobRow, type RecentUpdate } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, moneyShort } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
@@ -11,9 +11,12 @@ import { colors, space } from '../../theme';
 
 type Filter = 'total' | 'open' | 'ongoing' | 'tpi' | 'completed';
 const LATEST = 'latest';
+const REP = 'rep-c-anant';
 const ALL_OPEN = 'all-open';
 const ALL_ONGOING = 'all-ongoing';
-const isAll = (p: string) => p === ALL_OPEN || p === ALL_ONGOING || p === LATEST;
+const isAll = (p: string) => p === ALL_OPEN || p === ALL_ONGOING || p === LATEST || p === REP;
+/** C Anant & Co. POs: marked on the job, or placed by them as the customer. */
+const isCAnant = (j: JobRow, reps: Record<string, string>) => reps[j.id] === REP_C_ANANT || /^c\s*anant/i.test(j.customer_code ?? '');
 
 /** Job no. 26-1012 → FY26-27 (job numbers restart each financial year). */
 export function fyOf(jobNo: string) {
@@ -40,8 +43,9 @@ export default function Jobs() {
   const [q, setQ] = useState('');
   const [openPo, setOpenPo] = useState<string | null>(null);
   const { data, error, loading, reload } = useQuery(async () => {
-    const [jobs, values, stages, recent] = await Promise.all([listJobs(), perms.seeMoney ? listJobValues() : Promise.resolve({}), getStages(), listRecentUpdates(15)]);
-    return { jobs, values: values as Record<string, number>, stages, recent };
+    const [jobs, values, stages, recent, reps] = await Promise.all([listJobs(), perms.seeMoney ? listJobValues() : Promise.resolve({}), getStages(), listRecentUpdates(15),
+      perms.manageJobs ? listJobReps() : Promise.resolve({} as Record<string, string>)]);
+    return { jobs, values: values as Record<string, number>, stages, recent, reps };
   }, [role]);
 
   const years = useMemo(() => {
@@ -52,6 +56,7 @@ export default function Jobs() {
   // jobs in the chosen period, before the status filter
   const inPeriod = useMemo(() => {
     const jobs = data?.jobs ?? [];
+    if (period === REP) return jobs.filter((j) => isCAnant(j, data?.reps ?? {}));
     if (period === ALL_OPEN) return jobs.filter(isPending);
     if (period === ALL_ONGOING) return jobs.filter((j) => matches(j, 'ongoing'));
     return jobs.filter((j) => fyOf(j.job_no) === period);
@@ -78,7 +83,7 @@ export default function Jobs() {
   );
   const overdue = shown.filter((j) => j.overdue).length;
 
-  const periodOptions = [{ value: LATEST, label: 'Latest updated' }, { value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y }))];
+  const periodOptions = [...(perms.manageJobs ? [{ value: REP, label: REP_C_ANANT }] : []), { value: LATEST, label: 'Latest updated' }, { value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y }))];
   const filterOptions: { value: Filter; label: string }[] = [
     { value: 'total', label: `Total PO received (${counts.total})` },
     { value: 'open', label: `Open PO (${counts.open})` },
@@ -100,7 +105,7 @@ export default function Jobs() {
         <Chips options={periodOptions} value={period} onChange={(v) => { setPeriod(v); setFilter('total'); }} />
         {!isAll(period) && <Chips options={filterOptions} value={filter} onChange={setFilter} />}
         {period !== LATEST && <View style={styles.stats}>
-          <Stat label={period === ALL_OPEN ? 'Open POs, all years' : period === ALL_ONGOING ? 'Ongoing POs, all years' : 'POs shown'} value={String(shown.length)} />
+          <Stat label={period === REP ? `${REP_C_ANANT} POs` : period === ALL_OPEN ? 'Open POs, all years' : period === ALL_ONGOING ? 'Ongoing POs, all years' : 'POs shown'} value={String(shown.length)} />
           <Stat label="Overdue" value={String(overdue)} tone={overdue ? colors.bad : undefined} />
           {periodTotal != null && <Stat label="Value incl. GST" value={moneyShort(periodTotal)} />}
         </View>}

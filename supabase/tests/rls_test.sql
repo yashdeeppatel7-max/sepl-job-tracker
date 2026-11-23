@@ -254,6 +254,17 @@ update invoices set invoice_no = '26/601' where invoice_no = '26/600';
 reset role;
 insert into pg_temp.results values ('accounts can correct an invoice no.', exists (select 1 from invoices where invoice_no = '26/601' and edited_by_name = 'Accounts'));
 
+-- ---------- Representative tag ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+insert into job_reps (job_id, rep) select id, 'C Anant & Co.' from jobs where job_no = '26-5000';
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+insert into pg_temp.results values ('Accounts cannot see representative tags', (select count(*) from job_reps) = 0);
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
+insert into pg_temp.results values ('Production cannot see representative tags', (select count(*) from job_reps) = 0);
+reset role;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed

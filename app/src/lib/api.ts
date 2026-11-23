@@ -87,6 +87,18 @@ export async function listJobs(): Promise<JobRow[]> {
 }
 
 /** Job totals; empty for roles without money access. */
+export const REP_C_ANANT = 'C Anant & Co.';
+/** Representative tags (Director, CEO, Admin only; others get an empty list). */
+export async function listJobReps(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from('job_reps').select('job_id, rep');
+  if (error) return {}; // table not set up yet
+  return Object.fromEntries((data as { job_id: string; rep: string }[]).map((r) => [r.job_id, r.rep]));
+}
+export async function setJobRep(jobId: string, rep: string | null) {
+  if (rep) must(await supabase.from('job_reps').upsert({ job_id: jobId, rep }).select('job_id'));
+  else must(await supabase.from('job_reps').delete().eq('job_id', jobId).select('job_id'));
+}
+
 export async function listJobValues(): Promise<Record<string, number>> {
   const rows = must(await supabase.from('job_values').select('job_id, total_value')) as { job_id: string; total_value: number }[];
   return Object.fromEntries(rows.map((r) => [r.job_id, r.total_value]));
