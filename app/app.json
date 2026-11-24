@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SEPL Job Tracker",
+    "name": "SEPL PO Status",
     "slug": "sepl-job-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,7 +12,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#1F3A5F",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -22,10 +22,10 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "name": "SEPL Job Tracker",
-      "shortName": "SEPL Jobs",
-      "themeColor": "#1F3A5F",
-      "backgroundColor": "#F3F5F8",
+      "name": "SEPL PO Status",
+      "shortName": "SEPL PO Status",
+      "themeColor": "#2E3192",
+      "backgroundColor": "#FFFFFF",
       "display": "standalone",
       "output": "single"
     },

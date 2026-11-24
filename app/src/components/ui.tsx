@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps, ReactNode } from 'react';
 import {
-  ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View,
+  ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View,
   type TextInputProps, type ViewStyle,
 } from 'react-native';
-import { colors, radius, space } from '../theme';
+import { brand, colors, radius, space } from '../theme';
 
 export function Screen({ children, refreshing, onRefresh, padded = true }: {
   children: ReactNode; refreshing?: boolean; onRefresh?: () => void; padded?: boolean;
@@ -94,8 +94,8 @@ export function Button({ title, onPress, kind = 'primary', disabled, busy, icon 
   title: string; onPress: () => void; kind?: 'primary' | 'secondary' | 'danger'; disabled?: boolean; busy?: boolean;
   icon?: ComponentProps<typeof Ionicons>['name'];
 }) {
-  const bg = kind === 'primary' ? colors.primary : kind === 'danger' ? colors.bad : colors.surface;
-  const fg = kind === 'secondary' ? colors.primary : '#fff';
+  const bg = kind === 'primary' ? colors.accent : kind === 'danger' ? colors.bad : colors.surface;
+  const fg = kind === 'secondary' ? colors.primary : kind === 'primary' ? colors.onAccent : '#fff';
   return (
     <Pressable
       disabled={disabled || busy}
@@ -180,3 +180,18 @@ const s = StyleSheet.create({
   barTrack: { height: 6, borderRadius: 3, backgroundColor: colors.chip, overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3, backgroundColor: colors.good },
 });
+
+/** Blue header bar with the orange brand stripe underneath. */
+export function BrandHeaderBackground() {
+  return <View style={{ flex: 1, backgroundColor: colors.primary, borderBottomWidth: 3, borderBottomColor: colors.accent }} />;
+}
+
+/** SEPL logo + app name, used as the title on the home (Jobs) screen. */
+export function BrandTitle() {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <Image source={require('../../assets/logo-tile.png')} style={{ width: 30, height: 30 }} accessibilityLabel="SEPL logo" />
+      <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>{brand.name}</Text>
+    </View>
+  );
+}

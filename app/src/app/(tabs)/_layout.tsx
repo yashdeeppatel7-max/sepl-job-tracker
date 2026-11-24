@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router/tabs';
 import { useAuth } from '../../lib/auth';
 import { colors } from '../../theme';
+import { BrandHeaderBackground, BrandTitle } from '../../components/ui';
 
 export default function TabsLayout() {
   const { perms } = useAuth();
@@ -11,12 +12,13 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerStyle: { backgroundColor: colors.primary },
+        headerBackground: BrandHeaderBackground,
         headerTintColor: '#fff',
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textFaint,
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Jobs', tabBarIcon: icon('construct-outline') }} />
+      <Tabs.Screen name="index" options={{ title: 'Jobs', headerTitle: () => <BrandTitle />, tabBarIcon: icon('construct-outline') }} />
       <Tabs.Screen name="finance" options={{ title: 'Finance', tabBarIcon: icon('wallet-outline'), href: perms.seeMoney ? undefined : null }} />
       <Tabs.Screen name="despatch" options={{ title: 'Despatch', tabBarIcon: icon('car-outline'), href: perms.seeDespatch ? undefined : null }} />
       <Tabs.Screen name="more" options={{ title: 'More', tabBarIcon: icon('person-circle-outline') }} />

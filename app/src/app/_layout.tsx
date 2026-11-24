@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from '../lib/auth';
 import { colors } from '../theme';
-import { Loading } from '../components/ui';
+import { BrandHeaderBackground, Loading } from '../components/ui';
 import { View } from 'react-native';
 
 function RootStack() {
@@ -12,6 +12,7 @@ function RootStack() {
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: colors.primary },
+        headerBackground: BrandHeaderBackground,
         headerTintColor: '#fff',
         headerTitleStyle: { fontWeight: '600' },
         contentStyle: { backgroundColor: colors.bg },

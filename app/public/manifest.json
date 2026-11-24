@@ -1,0 +1,14 @@
+{
+  "name": "SEPL PO Status",
+  "short_name": "SEPL PO Status",
+  "start_url": "/sepl-job-tracker/",
+  "scope": "/sepl-job-tracker/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#2E3192",
+  "icons": [
+    { "src": "/sepl-job-tracker/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/sepl-job-tracker/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/sepl-job-tracker/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
