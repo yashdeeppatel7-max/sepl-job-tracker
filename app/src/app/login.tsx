@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { Button, ErrorBox, Field } from '../components/ui';
 import { isConfigured, supabase } from '../lib/supabase';
-import { colors, space } from '../theme';
+import { brand, colors, space } from '../theme';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -21,8 +21,10 @@ export default function Login() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wrap}>
       <View style={styles.brand}>
-        <Text style={styles.logo}>SEPL</Text>
-        <Text style={styles.tag}>Job & PO tracker</Text>
+        <Image source={require('../../assets/logo-tile.png')} style={styles.logoImg} accessibilityLabel="SEPL logo" />
+        <Text style={styles.logo}>{brand.name}</Text>
+        <View style={styles.stripe} />
+        <Text style={styles.tag}>{brand.company}</Text>
       </View>
       <View style={styles.form}>
         {!isConfigured && <ErrorBox message="App is not connected to a database yet. Add the Supabase URL and key to app/.env (see README)." />}
@@ -38,9 +40,11 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.primary, justifyContent: 'center', padding: space.lg, gap: space.lg },
-  brand: { alignItems: 'center', gap: 4 },
-  logo: { color: '#fff', fontSize: 40, fontWeight: '800', letterSpacing: 4 },
-  tag: { color: '#C9D6E8', fontSize: 15 },
+  brand: { alignItems: 'center', gap: 6 },
+  logoImg: { width: 96, height: 96, marginBottom: 6 },
+  logo: { color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: 0.5 },
+  stripe: { width: 48, height: 3, borderRadius: 2, backgroundColor: colors.accent },
+  tag: { color: colors.primarySoft, fontSize: 13 },
   form: { backgroundColor: colors.bg, borderRadius: 16, padding: space.md, gap: space.md },
   help: { color: colors.textMuted, fontSize: 12, textAlign: 'center' },
 });
