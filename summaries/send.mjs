@@ -177,11 +177,16 @@ if (!to.length) { console.log('::error::No email address found for the Director 
 
 // ---------- send ----------
 const user = (process.env.GMAIL_USER || '').trim();
-const pass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
-if (!user || pass.length !== 16) {
-  console.log('::error::Add the GMAIL_USER and GMAIL_APP_PASSWORD secrets (the app password has 16 letters)');
+// App passwords are 16 letters, often copied as "abcd efgh ijkl mnop" (with spaces or odd characters)
+const rawPass = (process.env.GMAIL_APP_PASSWORD || '').trim();
+const letters = rawPass.replace(/[^a-zA-Z]/g, '').toLowerCase();
+const pass = letters.length === 16 ? letters : rawPass;
+if (!user || !rawPass) {
+  console.log('::error::Add the GMAIL_USER and GMAIL_APP_PASSWORD secrets');
   process.exit(1);
 }
+if (!user.includes('@')) console.log('::warning::GMAIL_USER should be the full Gmail address, e.g. name@gmail.com');
+if (letters.length !== 16) console.log(`::warning::GMAIL_APP_PASSWORD has ${letters.length} letters; a Google app password has 16. Trying it anyway.`);
 const nodemailer = (await import('nodemailer')).default;
 const mailer = nodemailer.createTransport({ host: 'smtp.gmail.com', port: 465, secure: true, auth: { user, pass } });
 try {
