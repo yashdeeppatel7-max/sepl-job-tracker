@@ -169,7 +169,7 @@ export default function ItemDetail() {
           <Card key={e.id}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: space.sm }}>
               <Text style={{ fontWeight: '600', color: colors.text, flex: 1 }}>{stageLabel(stages, e.stage_code)}</Text>
-              <Pill label={e.stage_code === REJECT_STAGE ? 'Rejected' : isCancelStage(e.stage_code) ? 'Cancelled' : e.stage_code === 'despatched' && e.status === 'in_progress' ? 'Part' : e.status === 'done' ? 'Done' : e.status === 'in_progress' ? 'Started' : 'Not needed'} tone={isCancelStage(e.stage_code) || e.stage_code === REJECT_STAGE ? 'bad' : e.status === 'done' ? 'good' : e.status === 'in_progress' ? 'info' : 'neutral'} />
+              <Pill label={e.stage_code === REJECT_STAGE ? 'Rejected' : isCancelStage(e.stage_code) ? 'Cancelled' : (e.stage_code === 'despatched' || e.stage_code === 'payment_received') && e.status === 'in_progress' ? 'Part' : e.status === 'done' ? 'Done' : e.status === 'in_progress' ? 'Started' : 'Not needed'} tone={isCancelStage(e.stage_code) || e.stage_code === REJECT_STAGE ? 'bad' : e.status === 'done' ? 'good' : e.status === 'in_progress' ? 'info' : 'neutral'} />
             </View>
             <Muted>
               {workAndEntry(e.happened_on, e.created_at)}

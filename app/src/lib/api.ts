@@ -65,6 +65,7 @@ export const isCancelStage = (code: string | null | undefined) => !!code && CANC
 /** Label for an item's current stage; a despatch marked Started reads "Part despatched". */
 export const itemStageText = (stages: Stage[], code: string | null, status: string | null) =>
   code === 'despatched' && status === 'in_progress' ? 'Part despatched'
+    : code === 'payment_received' ? (status === 'in_progress' ? 'Part paid' : 'Paid')
     : stageLabel(stages, code) + (status === 'in_progress' ? ' · in progress' : '');
 
 export const stageLabel = (stages: Stage[], code: string | null) =>

@@ -78,7 +78,7 @@ export default function JobDetail() {
       <Section title={`Items (${items.length})`}>
         {items.map((it) => {
           const price = fin?.prices[it.id];
-          const done = ['despatched', 'documents_sent', 'payment_received'].includes(it.current_stage ?? '') && !(it.current_stage === 'despatched' && it.current_status === 'in_progress');
+          const done = ['despatched', 'documents_sent', 'payment_received'].includes(it.current_stage ?? '') && !(['despatched', 'payment_received'].includes(it.current_stage ?? '') && it.current_status === 'in_progress');
           return (
             <Card key={it.id} onPress={() => router.push(`/item/${it.id}`)}>
               <Text style={{ fontSize: 15, fontWeight: '600', color: colors.text }}>{it.line_no}. {it.description}</Text>

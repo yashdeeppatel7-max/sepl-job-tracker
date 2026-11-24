@@ -265,6 +265,39 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role aut
 insert into pg_temp.results values ('Production cannot see representative tags', (select count(*) from job_reps) = 0);
 reset role;
 
+-- ---------- Payments move items to Payment received ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-6000","line_no":1,"customer":"GNFC","description":"PAY A","qty":1,"invoices":[{"no":"26/700","date":"2026-11-01"}],"status_text":"Complete"},
+  {"job_no":"26-6000","line_no":2,"customer":"GNFC","description":"PAY B","qty":1,"invoices":[{"no":"26/700","date":"2026-11-01"}],"status_text":"Complete"}]'::jsonb);
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+update invoices set amount = 1000 where invoice_no = '26/700';
+insert into payments (invoice_id, amount, paid_on) select id, 400, '2026-11-15' from invoices where invoice_no = '26/700';
+reset role;
+insert into pg_temp.results values ('part payment = Payment received in progress, PO stays open',
+  (select current_stage || '/' || current_status from line_items where description = 'PAY A') = 'payment_received/in_progress'
+  and (select status from jobs where job_no = '26-6000') = 'in_progress'
+  and exists (select 1 from stage_events where note = 'From payments' and created_by_name = 'Accounts'));
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+insert into payments (invoice_id, amount, paid_on) select id, 600, '2026-11-20' from invoices where invoice_no = '26/700';
+reset role;
+insert into pg_temp.results values ('full payment = items Payment received, PO completed',
+  (select count(*) from line_items where description like 'PAY _' and current_stage = 'payment_received' and current_status = 'done') = 2
+  and (select status from jobs where job_no = '26-6000') = 'completed'
+  and (select count(*) from stage_events e join line_items li on li.id = e.line_item_id where li.description like 'PAY _' and e.note = 'From payments') = 2
+  and (select max(e.happened_on) from stage_events e join line_items li on li.id = e.line_item_id where li.description like 'PAY _' and e.note = 'From payments') = '2026-11-20');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+delete from payments where invoice_id = (select id from invoices where invoice_no = '26/700');
+reset role;
+insert into pg_temp.results values ('payments removed = back to Despatched',
+  (select count(*) from line_items where description like 'PAY _' and current_stage = 'despatched') = 2
+  and not exists (select 1 from stage_events e join line_items li on li.id = e.line_item_id where li.description like 'PAY _' and e.note = 'From payments'));
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+update invoices set settled = true where invoice_no = '26/700';
+reset role;
+insert into pg_temp.results values ('invoice marked settled = items paid',
+  (select count(*) from line_items where description like 'PAY _' and current_stage = 'payment_received' and current_status = 'done') = 2);
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed
