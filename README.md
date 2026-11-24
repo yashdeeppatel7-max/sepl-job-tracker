@@ -98,3 +98,19 @@ The PO Google Sheet can push itself to the app every hour (plus **SEPL App → S
 - Find backups under the run's **Artifacts**. GitHub keeps each for 90 days (about 13 weekly copies). Download one now and then to keep it longer.
 - Inside: `app.dump` (all app tables, data and access rules), `logins.sql` (staff logins), `login-triggers.sql`, and `RESTORE.txt` with the restore commands. Open it with 7-Zip (Windows) or Keka (Mac) and the password.
 - One-time setup: add the repository secret `BACKUP_PASSWORD` (`SUPABASE_DB_URL` is already used by the migrations workflow).
+
+## WhatsApp summaries
+
+`.github/workflows/whatsapp-summary.yml` sends two WhatsApp messages through the free
+[CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) gateway:
+
+- **Daily**, Mon–Sat about 8:00 AM India time, to the Director and the CEO: work moved, despatches,
+  invoices and payments since the last report (Monday covers Sat + Sun), plus overdue POs,
+  POs due in 7 days and POs with no update for 10+ days.
+- **Weekly**, Mondays about 8:15 AM, to the Director only: money customers owe (by age, past due date,
+  by customer, oldest), payments received in the last 7 days, and unpaid supplier bills.
+
+Queries: `summaries/daily.sql`, `summaries/weekly.sql` (read-only). Message text: `summaries/send.mjs`.
+Each person activates CallMeBot once from their own WhatsApp and gets a key; the repository secrets
+`WA_DIRECTOR` and `WA_CEO` hold "phone-with-country-code key", e.g. `+91 98250 12345 1234567`.
+Test locally with `DRY_RUN=true node summaries/send.mjs daily data.json`.
