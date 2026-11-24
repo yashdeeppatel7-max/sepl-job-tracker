@@ -101,8 +101,10 @@ The PO Google Sheet can push itself to the app every hour (plus **SEPL App → S
 
 ## WhatsApp summaries
 
-`.github/workflows/whatsapp-summary.yml` sends two WhatsApp messages through the free
-[CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/) gateway:
+`.github/workflows/whatsapp-summary.yml` sends two WhatsApp messages through
+[Green API](https://green-api.com/en) (free Developer plan: up to 3 chats), from a WhatsApp number
+linked in the Green API console like WhatsApp Web. [CallMeBot](https://www.callmebot.com/blog/free-api-whatsapp-messages/)
+is a fallback when `GREEN_API` is not set.
 
 - **Daily**, Mon–Sat about 8:00 AM India time, to the Director and the CEO: work moved, despatches,
   invoices and payments since the last report (Monday covers Sat + Sun), plus overdue POs,
@@ -111,6 +113,7 @@ The PO Google Sheet can push itself to the app every hour (plus **SEPL App → S
   by customer, oldest), payments received in the last 7 days, and unpaid supplier bills.
 
 Queries: `summaries/daily.sql`, `summaries/weekly.sql` (read-only). Message text: `summaries/send.mjs`.
-Each person activates CallMeBot once from their own WhatsApp and gets a key; the repository secrets
-`WA_DIRECTOR` and `WA_CEO` hold "phone-with-country-code key", e.g. `+91 98250 12345 1234567`.
+Secrets: `GREEN_API` = "apiUrl idInstance apiTokenInstance" from the Green API console;
+`WA_DIRECTOR` and `WA_CEO` = WhatsApp numbers with country code, e.g. `+91 98250 12345`
+(for CallMeBot, add a space and that person's CallMeBot key).
 Test locally with `DRY_RUN=true node summaries/send.mjs daily data.json`.

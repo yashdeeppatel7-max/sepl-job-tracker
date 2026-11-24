@@ -1,4 +1,5 @@
-# Morning WhatsApp summaries, sent through CallMeBot (free).
+# Morning WhatsApp summaries, sent through Green API (free Developer plan, up to 3 chats)
+# from a WhatsApp number linked in the green-api.com console. CallMeBot also works as a fallback.
 #   Daily  (Mon–Sat, about 8:00 AM India time) to the Director and the CEO:
 #          what moved since the last report, and what is stuck.
 #          Monday's report covers Saturday and Sunday.
@@ -6,9 +7,10 @@
 #
 # Needs repository secrets:
 #   SUPABASE_DB_URL - already set up for "Apply database changes"
-#   WA_DIRECTOR     - Director's WhatsApp number with country code, a space, then the CallMeBot key
-#                     e.g.  +91 98250 12345 1234567
+#   GREEN_API       - from the green-api.com console: apiUrl idInstance apiTokenInstance (spaces between)
+#   WA_DIRECTOR     - Director's WhatsApp number with country code, e.g. +91 98250 12345
 #   WA_CEO          - the same for the CEO
+#   (without GREEN_API, CallMeBot is used: WA_DIRECTOR / WA_CEO = number, a space, then the CallMeBot key)
 #
 # The repository is public: the log never shows the message, numbers or keys.
 # Run it by hand from Actions -> "WhatsApp summaries" -> Run workflow.
@@ -59,6 +61,7 @@ jobs:
 
       - name: Send on WhatsApp
         env:
+          GREEN_API: ${{ secrets.GREEN_API }}
           WA_DIRECTOR: ${{ secrets.WA_DIRECTOR }}
           WA_CEO: ${{ secrets.WA_CEO }}
           ONLY_DIRECTOR: ${{ steps.pick.outputs.only }}
