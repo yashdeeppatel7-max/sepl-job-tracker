@@ -90,3 +90,11 @@ The PO Google Sheet can push itself to the app every hour (plus **SEPL App → S
 
 ## Automatic database changes
 `.github/workflows/db-migrate.yml` applies any new or changed file in `supabase/migrations/` to Supabase when it is pushed to `main` (each file in one transaction; files are written to be safe to run again). It can also re-apply one file from **Actions → Apply database changes → Run workflow**. One-time setup: add the repository secret `SUPABASE_DB_URL` = Supabase **Connect → Session pooler** connection string with the database password filled in.
+
+## Database backup
+`.github/workflows/db-backup.yml` backs up the Supabase database every Monday at 3:00 AM India time (the free plan has no downloadable backups). It can also be run any time from **Actions → Weekly database backup → Run workflow**.
+
+- Because this repository is public, each backup is a `.7z` file locked with AES-256 using the `BACKUP_PASSWORD` repository secret (20+ characters; keep a copy somewhere safe, since GitHub never shows it again). Nothing about the data is printed in the log.
+- Find backups under the run's **Artifacts**. GitHub keeps each for 90 days (about 13 weekly copies). Download one now and then to keep it longer.
+- Inside: `app.dump` (all app tables, data and access rules), `logins.sql` (staff logins), `login-triggers.sql`, and `RESTORE.txt` with the restore commands. Open it with 7-Zip (Windows) or Keka (Mac) and the password.
+- One-time setup: add the repository secret `BACKUP_PASSWORD` (`SUPABASE_DB_URL` is already used by the migrations workflow).

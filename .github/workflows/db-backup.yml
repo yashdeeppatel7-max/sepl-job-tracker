@@ -1,0 +1,106 @@
+# Weekly backup of the Supabase database (the free plan has no downloadable backups).
+#
+# The repository is PUBLIC, so the backup is locked with a password before it is
+# saved: it is a .7z file encrypted with AES-256, and only someone with the
+# BACKUP_PASSWORD secret can open it. Nothing about the data is printed in the log.
+#
+# Needs two repository secrets:
+#   SUPABASE_DB_URL  - already set up for "Apply database changes"
+#   BACKUP_PASSWORD  - a long password (20+ characters) that you also keep somewhere safe
+#
+# Each run saves one file under Actions -> "Weekly database backup" -> the run -> Artifacts.
+# GitHub keeps each one for 90 days, so about 13 weekly backups are always available.
+# See README.md ("Database backup") for how to open one and how to restore.
+name: Weekly database backup
+on:
+  schedule:
+    - cron: '30 21 * * 0'   # Sundays 21:30 UTC = Mondays 3:00 AM India time
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write   # only to keep this schedule switched on (see last step)
+concurrency: db-backup
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the secrets are set
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSWORD }}
+        run: |
+          if [ -z "$DB_URL" ]; then echo "::error::Add the SUPABASE_DB_URL secret (see README)"; exit 1; fi
+          if [ ${#PASS} -lt 20 ]; then echo "::error::Add a BACKUP_PASSWORD secret of at least 20 characters (see README)"; exit 1; fi
+
+      - name: Install a matching Postgres client
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          sudo apt-get -qq update && sudo apt-get -qq install -y postgresql-common p7zip-full >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          MAJOR=$(psql "$DB_URL" -Atc "select current_setting('server_version_num')::int / 10000" 2>/dev/null || true)
+          if [ -z "$MAJOR" ]; then
+            sudo apt-get -qq install -y postgresql-client >/dev/null
+            MAJOR=$(psql "$DB_URL" -Atc "select current_setting('server_version_num')::int / 10000")
+          fi
+          echo "Database is Postgres $MAJOR"
+          sudo apt-get -qq install -y "postgresql-client-$MAJOR" >/dev/null
+          echo "/usr/lib/postgresql/$MAJOR/bin" >> "$GITHUB_PATH"
+
+      - name: Dump the database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -eo pipefail
+          mkdir -p backup && cd backup
+          # 1. All app tables, data, functions, row-level security rules (schema "public")
+          pg_dump "$DB_URL" --schema=public --no-owner --format=custom --file=app.dump
+          # 2. Staff logins (emails, password hashes) so nobody has to be re-invited
+          pg_dump "$DB_URL" --data-only --table=auth.users --table=auth.identities --file=logins.sql
+          # 3. Triggers on the login tables (e.g. create a profile when a user is added)
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -qAt -c "set search_path = ''" -c "
+            select pg_get_triggerdef(t.oid) || ';'
+            from pg_trigger t
+            join pg_class c on c.oid = t.tgrelid
+            join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'auth' and not t.tgisinternal" > login-triggers.sql
+          cat > RESTORE.txt <<'TXT'
+          How to restore (into an empty Supabase project, or after a mistake):
+            1. psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -f logins.sql
+               (skip if the project still has its users; it would fail on duplicates)
+            2. pg_restore --dbname="$DB_URL" --no-owner --clean --if-exists app.dump
+            3. psql "$DB_URL" -v ON_ERROR_STOP=1 -f login-triggers.sql
+               (skip if the trigger already exists)
+          Use the "Session pooler" connection string as $DB_URL.
+          Postgres client tools of the same version as the database are needed.
+          TXT
+          ls -l
+
+      - name: Lock the backup with the password
+        env:
+          PASS: ${{ secrets.BACKUP_PASSWORD }}
+        run: |
+          set -eo pipefail
+          NAME="sepl-db-backup-$(date -u +%Y-%m-%d)"
+          echo "NAME=$NAME" >> "$GITHUB_ENV"
+          # -mhe=on also hides the file names inside the archive
+          7z a -t7z -mhe=on -p"$PASS" "$NAME.7z" ./backup/* >/dev/null
+          7z t -p"$PASS" "$NAME.7z" >/dev/null && echo "Encrypted archive checks out"
+          rm -rf backup
+          ls -l "$NAME.7z"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: ${{ env.NAME }}.7z
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+
+      # GitHub switches off schedules in public repos after 60 days without commits.
+      # Re-enabling the workflow on every run keeps the weekly backup going.
+      - name: Keep the weekly schedule switched on
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/db-backup.yml/enable" || true
