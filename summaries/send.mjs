@@ -1,11 +1,18 @@
-// Turns the JSON from daily.sql / weekly.sql into a WhatsApp message and sends it
-// through CallMeBot (free WhatsApp gateway).
+// Turns the JSON from daily.sql / weekly.sql into a WhatsApp message and sends it.
 //
 //   node summaries/send.mjs daily  data.json
 //   node summaries/send.mjs weekly data.json
 //
+// Two ways to send (the first one that is set up is used):
+//   1. Green API (free Developer plan, up to 3 chats): a WhatsApp number linked like WhatsApp Web.
+//      GREEN_API = the three values from the green-api.com console, separated by spaces:
+//                  apiUrl idInstance apiTokenInstance
+//                  e.g. "https://7103.api.greenapi.com 7103123456 d75b3a66374942c5b3c019c698abc2067e151558acbd412345"
+//   2. CallMeBot (free, each person activates it and gets a key).
+//
 // Environment:
-//   WA_DIRECTOR, WA_CEO  "<phone with country code> <CallMeBot apikey>", e.g. "+91 98250 12345 1234567"
+//   WA_DIRECTOR, WA_CEO  phone number with country code, e.g. "+91 98250 12345"
+//                        (for CallMeBot: the number, a space, then that person's CallMeBot key)
 //   ONLY_DIRECTOR=true   send only to the Director (used for test runs)
 //   DRY_RUN=true         print the message instead of sending (for local testing only)
 //
@@ -15,7 +22,6 @@ import { readFileSync } from 'node:fs';
 
 const APP_URL = 'https://yashdeeppatel7-max.github.io/sepl-job-tracker/';
 const MAX_LIST = 8;      // lines per section before "+N more"
-const CHUNK = 1500;      // characters per WhatsApp message
 
 const [kind, file] = process.argv.slice(2);
 if (!['daily', 'weekly'].includes(kind) || !file) {
@@ -130,6 +136,9 @@ function weeklyMessage(w) {
 }
 
 // ---------- sending ----------
+const green = parseGreen(process.env.GREEN_API);
+const CHUNK = green ? 4000 : 1500;      // characters per WhatsApp message
+
 function chunks(text) {
   const out = []; let cur = '';
   for (const line of text.split('\n')) {
@@ -140,32 +149,63 @@ function chunks(text) {
   return out.length > 1 ? out.map((c, i) => (i ? `(${i + 1}/${out.length})\n` : '') + c) : out;
 }
 
-// "+91 98250 12345 1234567" -> { phone: '919825012345', key: '1234567' }
-function parseRecipient(raw) {
+// "https://7103.api.greenapi.com 7103123456 d75b...": order does not matter
+function parseGreen(raw) {
+  if (!raw || !raw.trim()) return null;
+  const parts = raw.trim().split(/[\s,;|]+/);
+  let url = parts.find((x) => /^https?:\/\//i.test(x)) || 'https://api.green-api.com';
+  const rest = parts.filter((x) => !/^https?:\/\//i.test(x));
+  const id = rest.find((x) => /^\d{6,}$/.test(x.replace(/^waInstance/i, '')))?.replace(/^waInstance/i, '');
+  const token = rest.find((x) => /^[a-z0-9]{20,}$/i.test(x) && !/^\d+$/.test(x));
+  if (!id || !token) return { bad: true };
+  return { url: url.replace(/\/+$/, ''), id, token };
+}
+
+// "+91 98250 12345" -> phone '919825012345'; with CallMeBot the last number is the key
+function parseRecipient(raw, needKey) {
   const runs = String(raw ?? '').split(/[^0-9]+/).filter(Boolean);
-  if (runs.length < 2) return null;
-  const key = runs.pop();
+  let key = null;
+  if (needKey || (runs.length > 1 && runs[runs.length - 1].length < 9 && runs.join('').length > 12)) {
+    if (runs.length < 2) return null;
+    key = runs.pop();
+  }
   let phone = runs.join('');
   if (phone.length === 10) phone = '91' + phone;      // Indian number typed without +91
-  if (phone.length < 11) return null;
+  if (phone.length < 11 || phone.length > 15) return null;
+  if (needKey && !key) return null;
   return { phone, key };
+}
+
+async function sendOne(rcpt, part) {
+  if (green) {
+    const res = await fetch(`${green.url}/waInstance${green.id}/sendMessage/${green.token}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId: `${rcpt.phone}@c.us`, message: part }),
+    });
+    const body = await res.json().catch(() => ({}));
+    return { ok: res.ok && !!body.idMessage, status: res.status };
+  }
+  const url = 'https://api.callmebot.com/whatsapp.php?' + new URLSearchParams({ phone: '+' + rcpt.phone, text: part, apikey: rcpt.key });
+  const res = await fetch(url);
+  const body = await res.text();
+  return { ok: res.ok && !/invalid|error|not (allowed|activated)|wrong/i.test(body), status: res.status };
 }
 
 async function sendTo(label, rcpt, text) {
   for (const part of chunks(text)) {
-    const url = 'https://api.callmebot.com/whatsapp.php?' + new URLSearchParams({ phone: '+' + rcpt.phone, text: part, apikey: rcpt.key });
     let ok = false;
     for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
       try {
-        const res = await fetch(url);
-        const body = await res.text();
-        ok = res.ok && !/invalid|error|not (allowed|activated)|wrong/i.test(body);
-        if (!ok) console.log(`${label}: attempt ${attempt} not accepted (HTTP ${res.status})`);
+        const r = await sendOne(rcpt, part);
+        ok = r.ok;
+        if (!ok) console.log(`${label}: attempt ${attempt} not accepted (HTTP ${r.status})`);
+        if (r.status === 466) console.log('::error::Green API free plan limit reached (it allows 3 chats)');
+        if (r.status === 401 || r.status === 403) break;
       } catch { console.log(`${label}: attempt ${attempt} network error`); }
       if (!ok) await new Promise((r) => setTimeout(r, 10000 * attempt));
     }
     if (!ok) return false;
-    await new Promise((r) => setTimeout(r, 4000));       // CallMeBot asks for a gap between messages
+    await new Promise((r) => setTimeout(r, 4000));       // a short gap between messages
   }
   return true;
 }
@@ -177,14 +217,19 @@ if (process.env.DRY_RUN === 'true') {
   process.exit(0);
 }
 
+if (green?.bad) { console.log('::error::GREEN_API should hold apiUrl, idInstance and apiTokenInstance separated by spaces'); process.exit(1); }
+console.log(`Sending with ${green ? 'Green API' : 'CallMeBot'}`);
 const wanted = kind === 'weekly' || process.env.ONLY_DIRECTOR === 'true'
   ? [['Director', 'WA_DIRECTOR']] : [['Director', 'WA_DIRECTOR'], ['CEO', 'WA_CEO']];
 let sent = 0, failed = 0;
 for (const [label, env] of wanted) {
   if (!process.env[env]) { console.log(`::warning::${env} secret is not set, skipping the ${label}`); continue; }
-  const rcpt = parseRecipient(process.env[env]);
-  if (!rcpt) { console.log(`::error::${env} should be the phone number with country code, a space, then the CallMeBot key`); failed++; continue; }
+  const rcpt = parseRecipient(process.env[env], !green);
+  if (!rcpt) {
+    console.log(`::error::${env} should be the WhatsApp number with country code${green ? '' : ', a space, then the CallMeBot key'}`);
+    failed++; continue;
+  }
   if (await sendTo(label, rcpt, text)) { console.log(`${label}: sent (${chunks(text).length} message(s))`); sent++; }
-  else { console.log(`::error::${label}: CallMeBot did not accept the message. Check the key in ${env}, or send the activation message again.`); failed++; }
+  else { console.log(`::error::${label}: the message was not accepted. ${green ? 'Check GREEN_API and that the WhatsApp number is still linked (green-api.com console shows "authorized").' : `Check the key in ${env}.`}`); failed++; }
 }
 if (failed || !sent) process.exit(1);
