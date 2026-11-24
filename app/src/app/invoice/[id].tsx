@@ -46,9 +46,10 @@ export default function InvoiceDetail() {
           <Pill label={(inv.amount ?? 0) < 0 ? 'Credit note' : inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad'} />
         </View>
         <Row label="Invoice date" value={date(inv.invoice_date)} />
-        <Row label="Amount (incl. GST)" value={money(inv.amount)} />
+        <Row label="Amount (incl. GST)" value={inv.amount == null ? 'Not entered' : money(inv.amount)} />
         <Row label="Received" value={money(inv.paid_amount)} />
-        <Row label="Balance" value={money(balance)} />
+        <Row label="Balance" value={inv.amount == null ? '–' : money(balance)} />
+        {inv.amount == null ? <Muted>The amount isn't known yet (an item may be split over more than one invoice). Tap Edit invoice to enter it.</Muted> : null}
         {(inv as any).edited_at ? <Muted>Edited{(inv as any).edited_by_name ? ` by ${(inv as any).edited_by_name}` : ''} on {date(String((inv as any).edited_at).slice(0, 10))}</Muted> : null}
         {editing
           ? <EditInvoice inv={inv} linked={items.map((it) => it.line_items.id)} hasPayments={payments.length > 0}

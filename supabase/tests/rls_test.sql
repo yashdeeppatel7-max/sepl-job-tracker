@@ -298,6 +298,16 @@ reset role;
 insert into pg_temp.results values ('invoice marked settled = items paid',
   (select count(*) from line_items where description like 'PAY _' and current_stage = 'payment_received' and current_status = 'done') = 2);
 
+-- ---------- Invoice amount from the sheet even with a stale old invoice link ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-7000","line_no":1,"customer":"GNFC","description":"AMT ME","qty":1,"total_value":1293575,"invoices":[{"no":"25/999","date":"2026-03-01"}]}]'::jsonb);
+update invoices set amount = null where invoice_no = '25/999';
+insert into payments (invoice_id, amount, reference) select id, 5, 'old' from invoices where invoice_no = '25/999';
+select public.import_po_rows('[{"job_no":"26-7000","line_no":1,"customer":"GNFC","description":"AMT ME","qty":1,"total_value":1293575,"invoices":[{"no":"26/054x","date":"2026-08-19"}]}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('blank invoice amount filled from the sheet item value',
+  (select amount from invoices where invoice_no = '26/054x') = 1293575);
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed
