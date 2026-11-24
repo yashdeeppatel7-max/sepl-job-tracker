@@ -1,0 +1,72 @@
+# Morning WhatsApp summaries, sent through CallMeBot (free).
+#   Daily  (Mon–Sat, about 8:00 AM India time) to the Director and the CEO:
+#          what moved since the last report, and what is stuck.
+#          Monday's report covers Saturday and Sunday.
+#   Weekly (Mondays, about 8:15 AM India time) to the Director only: payments due.
+#
+# Needs repository secrets:
+#   SUPABASE_DB_URL - already set up for "Apply database changes"
+#   WA_DIRECTOR     - Director's WhatsApp number with country code, a space, then the CallMeBot key
+#                     e.g.  +91 98250 12345 1234567
+#   WA_CEO          - the same for the CEO
+#
+# The repository is public: the log never shows the message, numbers or keys.
+# Run it by hand from Actions -> "WhatsApp summaries" -> Run workflow.
+name: WhatsApp summaries
+on:
+  schedule:
+    - cron: '30 2 * * 1-6'   # 02:30 UTC = 8:00 AM India time, Monday to Saturday
+    - cron: '45 2 * * 1'     # 02:45 UTC = 8:15 AM India time, Mondays
+  workflow_dispatch:
+    inputs:
+      summary:
+        description: Which summary
+        type: choice
+        options: [daily, weekly]
+        default: daily
+      only_director:
+        description: Send only to the Director (test)
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  actions: write   # only to keep the schedule switched on (last step)
+concurrency: whatsapp-summary
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick the summary
+        id: pick
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ github.event.schedule }}" = "45 2 * * 1" ]; then echo "kind=weekly" >> "$GITHUB_OUTPUT"; else echo "kind=daily" >> "$GITHUB_OUTPUT"; fi
+            echo "only=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "kind=${{ inputs.summary }}" >> "$GITHUB_OUTPUT"
+            echo "only=${{ inputs.only_director }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Read the numbers from the database
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then echo "::error::Add the SUPABASE_DB_URL secret"; exit 1; fi
+          psql "$DB_URL" -Atq -v ON_ERROR_STOP=1 -f "summaries/${{ steps.pick.outputs.kind }}.sql" > "$RUNNER_TEMP/data.json"
+          echo "Data read ($(wc -c < "$RUNNER_TEMP/data.json") bytes)"
+
+      - name: Send on WhatsApp
+        env:
+          WA_DIRECTOR: ${{ secrets.WA_DIRECTOR }}
+          WA_CEO: ${{ secrets.WA_CEO }}
+          ONLY_DIRECTOR: ${{ steps.pick.outputs.only }}
+        run: node summaries/send.mjs "${{ steps.pick.outputs.kind }}" "$RUNNER_TEMP/data.json"
+
+      # GitHub switches off schedules in public repos after 60 days without commits.
+      - name: Keep the schedule switched on
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/whatsapp-summary.yml/enable" || true
