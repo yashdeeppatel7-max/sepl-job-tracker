@@ -1,20 +1,20 @@
-# Morning WhatsApp summaries, sent through Green API (free Developer plan, up to 3 chats)
-# from a WhatsApp number linked in the green-api.com console. CallMeBot also works as a fallback.
+# Morning summary emails, sent from a Gmail account.
 #   Daily  (Mon–Sat, about 8:00 AM India time) to the Director and the CEO:
 #          what moved since the last report, and what is stuck.
-#          Monday's report covers Saturday and Sunday.
+#          Monday's email covers Saturday and Sunday.
 #   Weekly (Mondays, about 8:15 AM India time) to the Director only: payments due.
 #
-# Needs repository secrets:
-#   SUPABASE_DB_URL - already set up for "Apply database changes"
-#   GREEN_API       - from the green-api.com console: apiUrl idInstance apiTokenInstance (spaces between)
-#   WA_DIRECTOR     - Director's WhatsApp number with country code, e.g. +91 98250 12345
-#   WA_CEO          - the same for the CEO
-#   (without GREEN_API, CallMeBot is used: WA_DIRECTOR / WA_CEO = number, a space, then the CallMeBot key)
+# Emails go to the login emails of the Director and CEO (app: More -> Users & roles).
 #
-# The repository is public: the log never shows the message, numbers or keys.
-# Run it by hand from Actions -> "WhatsApp summaries" -> Run workflow.
-name: WhatsApp summaries
+# Needs repository secrets:
+#   SUPABASE_DB_URL     - already set up for "Apply database changes"
+#   GMAIL_USER          - the Gmail address that sends the emails
+#   GMAIL_APP_PASSWORD  - a 16-letter app password for that Gmail account
+#   MAIL_TO_DIRECTOR, MAIL_TO_CEO - optional, other addresses to use instead
+#
+# The repository is public: the log never shows the email contents or addresses.
+# Run it by hand from Actions -> "Summary emails" -> Run workflow.
+name: Summary emails
 on:
   schedule:
     - cron: '30 2 * * 1-6'   # 02:30 UTC = 8:00 AM India time, Monday to Saturday
@@ -33,7 +33,7 @@ on:
 permissions:
   contents: read
   actions: write   # only to keep the schedule switched on (last step)
-concurrency: whatsapp-summary
+concurrency: summary-email
 jobs:
   send:
     runs-on: ubuntu-latest
@@ -57,19 +57,24 @@ jobs:
         run: |
           if [ -z "$DB_URL" ]; then echo "::error::Add the SUPABASE_DB_URL secret"; exit 1; fi
           psql "$DB_URL" -Atq -v ON_ERROR_STOP=1 -f "summaries/${{ steps.pick.outputs.kind }}.sql" > "$RUNNER_TEMP/data.json"
+          psql "$DB_URL" -Atq -v ON_ERROR_STOP=1 -f summaries/recipients.sql > "$RUNNER_TEMP/recipients.json"
           echo "Data read ($(wc -c < "$RUNNER_TEMP/data.json") bytes)"
 
-      - name: Send on WhatsApp
+      - name: Install the email library
+        run: npm install --no-save --no-audit --no-fund nodemailer@6.9.16 >/dev/null
+
+      - name: Send the email
         env:
-          GREEN_API: ${{ secrets.GREEN_API }}
-          WA_DIRECTOR: ${{ secrets.WA_DIRECTOR }}
-          WA_CEO: ${{ secrets.WA_CEO }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO_DIRECTOR: ${{ secrets.MAIL_TO_DIRECTOR }}
+          MAIL_TO_CEO: ${{ secrets.MAIL_TO_CEO }}
           ONLY_DIRECTOR: ${{ steps.pick.outputs.only }}
-        run: node summaries/send.mjs "${{ steps.pick.outputs.kind }}" "$RUNNER_TEMP/data.json"
+        run: node summaries/send.mjs "${{ steps.pick.outputs.kind }}" "$RUNNER_TEMP/data.json" "$RUNNER_TEMP/recipients.json"
 
       # GitHub switches off schedules in public repos after 60 days without commits.
       - name: Keep the schedule switched on
         if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/whatsapp-summary.yml/enable" || true
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/summary-email.yml/enable" || true
