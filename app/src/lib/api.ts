@@ -185,6 +185,15 @@ export async function getItem(id: string) {
   return { item, events };
 }
 
+/** Invoices (and credit notes) this item is on, oldest first. Finance roles only (others get none). */
+export async function listItemInvoices(itemId: string) {
+  const links = must(await supabase.from('invoice_items').select('invoice_id').eq('line_item_id', itemId)) as { invoice_id: string }[];
+  if (!links.length) return [];
+  return must(await supabase.from('invoice_status').select('id, invoice_no, invoice_date, amount, paid_amount, payment_status, is_credit_note')
+    .in('id', links.map((l) => l.invoice_id)).order('invoice_date', { ascending: true })) as
+    { id: string; invoice_no: string; invoice_date: string | null; amount: number | null; paid_amount: number; payment_status: string; is_credit_note: boolean }[];
+}
+
 export async function addStageEvent(e: {
   line_item_id: string; stage_code: string; status: string; mode: string; vendor_name?: string; note?: string; happened_on: string;
 }) {
