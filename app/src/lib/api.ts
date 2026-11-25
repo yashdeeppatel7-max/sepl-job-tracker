@@ -90,6 +90,18 @@ export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
 };
 
 // ---------- jobs ----------
+/** Item descriptions per job (in line order), for the PO boxes. */
+export async function listItemNames(): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  for (let from = 0; ; from += 1000) {
+    const page = must(await supabase.from('line_items').select('id, job_id, line_no, description')
+      .order('job_id').order('line_no').range(from, from + 999)) as { job_id: string; description: string }[];
+    for (const r of page) (out[r.job_id] ??= []).push(r.description);
+    if (page.length < 1000) break;
+  }
+  return out;
+}
+
 export async function listJobs(): Promise<JobRow[]> {
   const all: JobRow[] = [];
   for (let from = 0; ; from += 1000) {

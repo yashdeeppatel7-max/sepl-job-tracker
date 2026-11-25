@@ -3,7 +3,7 @@ import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Card, Chips, Empty, ErrorBox, Loading, Muted, Pill, ProgressBar } from '../../components/ui';
-import { getStages, isCancelStage, itemStageText, JOB_STATUS_LABEL, listJobs, listJobValues, listJobReps, listRecentUpdates, REJECT_STAGE, REP_C_ANANT, type JobRow, type RecentUpdate } from '../../lib/api';
+import { getStages, isCancelStage, itemStageText, JOB_STATUS_LABEL, listItemNames, listJobs, listJobValues, listJobReps, listRecentUpdates, REJECT_STAGE, REP_C_ANANT, type JobRow, type RecentUpdate } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, moneyShort, workAndEntry } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
@@ -48,9 +48,9 @@ export default function Jobs() {
   const cols = boxes ? Math.max(2, Math.min(6, Math.floor((width - space.md * 2) / 220))) : 1;
   const boxW = (width - space.md * 2 - space.sm * (cols - 1)) / cols;
   const { data, error, loading, reload } = useQuery(async () => {
-    const [jobs, values, stages, recent, reps] = await Promise.all([listJobs(), perms.seeMoney ? listJobValues() : Promise.resolve({}), getStages(), listRecentUpdates(15),
-      perms.manageJobs ? listJobReps() : Promise.resolve({} as Record<string, string>)]);
-    return { jobs, values: values as Record<string, number>, stages, recent, reps };
+    const [jobs, values, stages, recent, reps, itemNames] = await Promise.all([listJobs(), perms.seeMoney ? listJobValues() : Promise.resolve({}), getStages(), listRecentUpdates(15),
+      perms.manageJobs ? listJobReps() : Promise.resolve({} as Record<string, string>), listItemNames().catch(() => ({} as Record<string, string[]>))]);
+    return { jobs, values: values as Record<string, number>, stages, recent, reps, itemNames };
   }, [role]);
 
   const years = useMemo(() => {
@@ -78,7 +78,7 @@ export default function Jobs() {
     return inPeriod.filter((j) => {
       if (!isAll(period) && !matches(j, filter)) return false;
       if (!term) return true;
-      return [j.job_no, j.customer_code, j.customer_name, j.customer_po_no].some((v) => v?.toLowerCase().includes(term));
+      return [j.job_no, j.customer_code, j.customer_name, j.customer_po_no, ...(data?.itemNames[j.id] ?? [])].some((v) => v?.toLowerCase().includes(term));
     });
   }, [inPeriod, period, filter, q]);
 
@@ -114,7 +114,7 @@ export default function Jobs() {
         </View>}
         <View style={styles.search}>
           <Ionicons name="search" size={18} color={colors.textFaint} />
-          <TextInput value={q} onChangeText={setQ} placeholder="Job no, customer or PO no" placeholderTextColor={colors.textFaint} style={styles.searchInput} autoCapitalize="none" />
+          <TextInput value={q} onChangeText={setQ} placeholder="Job no, customer, PO no or item" placeholderTextColor={colors.textFaint} style={styles.searchInput} autoCapitalize="none" />
           {period !== LATEST && <>
             <Pressable onPress={() => setBoxes(true)} accessibilityLabel="Box view" hitSlop={6}>
               <Ionicons name="grid" size={20} color={boxes ? colors.primary : colors.textFaint} />
@@ -152,7 +152,7 @@ export default function Jobs() {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
           ListEmptyComponent={<Empty text="No jobs match." />}
           renderItem={({ item }) => cols > 1
-            ? <JobBox width={boxW} job={item} value={data?.values[item.id]} stageLabel={stageText(item, data!.stages)} />
+            ? <JobBox width={boxW} items={data?.itemNames[item.id] ?? []} job={item} value={data?.values[item.id]} stageLabel={stageText(item, data!.stages)} />
             : <JobCard job={item} value={data?.values[item.id]} stageLabel={stageText(item, data!.stages)} />}
         />
       )}
@@ -189,7 +189,7 @@ function JobCard({ job, value, stageLabel }: { job: JobRow; value?: number; stag
 }
 
 /** Compact square-ish tile for the box view. */
-function JobBox({ job, value, stageLabel, width }: { job: JobRow; value?: number; stageLabel: string; width: number }) {
+function JobBox({ job, value, stageLabel, width, items }: { job: JobRow; value?: number; stageLabel: string; width: number; items: string[] }) {
   const tone = job.status === 'completed' ? colors.good : job.status === 'cancelled' ? colors.bad : job.status === 'on_hold' ? colors.warn : colors.info;
   return (
     <Pressable onPress={() => router.push(`/job/${job.id}`)} style={({ pressed }) => [styles.box, { width, borderTopColor: tone }, pressed && { opacity: 0.7 }]}>
@@ -198,8 +198,8 @@ function JobBox({ job, value, stageLabel, width }: { job: JobRow; value?: number
         <Text style={[styles.boxTag, { color: tone }]} numberOfLines={1}>{JOB_STATUS_LABEL[job.status]}</Text>
       </View>
       <Text style={styles.boxCustomer} numberOfLines={1}>{job.customer_code}{job.tpi_required ? '  ·  TPI' : ''}</Text>
-      <Text style={styles.boxMuted} numberOfLines={1}>Due {date(job.delivery_date)}</Text>
-      <Text style={styles.boxMuted} numberOfLines={1}>{stageLabel}</Text>
+      <Text style={styles.boxItem} numberOfLines={2}>{items[0]?.replace(/\s+/g, ' ').trim() ?? stageLabel}</Text>
+      {items.length > 1 && <Text style={styles.boxMuted}>+ {items.length - 1} more item{items.length > 2 ? 's' : ''}</Text>}
       <View style={{ flex: 1 }} />
       <View style={styles.cardHead}>
         <Text style={styles.boxMuted}>{job.items_despatched}/{job.item_count} despatched</Text>
@@ -238,6 +238,7 @@ const styles = StyleSheet.create({
   boxNo: { fontSize: 16, fontWeight: '700', color: colors.text },
   boxTag: { fontSize: 11, fontWeight: '700' },
   boxCustomer: { fontSize: 14, fontWeight: '600', color: colors.text },
+  boxItem: { fontSize: 12, color: colors.text },
   boxMuted: { fontSize: 12, color: colors.textMuted },
   boxValue: { fontSize: 13, fontWeight: '700', color: colors.primary },
 });
