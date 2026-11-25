@@ -308,6 +308,21 @@ reset role;
 insert into pg_temp.results values ('blank invoice amount filled from the sheet item value',
   (select amount from invoices where invoice_no = '26/054x') = 1293575);
 
+-- ---------- Paid net of a credit note: PO outstanding zero = items Paid ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-8000","line_no":1,"customer":"GNFC","description":"NET A","qty":10,"invoices":[{"no":"26/811","date":"2026-05-01"},{"no":"26/812","date":"2026-06-01"}],"status_text":"Dsp-1 Pndng-09 Nos. Dsp-2_09 Nos. Completed"}]'::jsonb);
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+update invoices set amount = 1000 where invoice_no = '26/811';
+update invoices set amount = 500 where invoice_no = '26/812';
+insert into invoices (job_id, invoice_no, invoice_date, amount, is_credit_note) select id, 'CR-81', '2026-06-05', -200, true from jobs where job_no = '26-8000';
+insert into payments (invoice_id, amount) select id, 1000 from invoices where invoice_no = '26/811';
+insert into payments (invoice_id, amount) select id, 300 from invoices where invoice_no = '26/812';
+reset role;
+insert into pg_temp.results values ('paid net of credit note = item Paid and PO completed',
+  (select current_stage || '/' || current_status from line_items where description = 'NET A') = 'payment_received/done'
+  and (select status from jobs where job_no = '26-8000') = 'completed');
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed
