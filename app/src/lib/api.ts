@@ -5,7 +5,7 @@ import { must } from './useQuery';
 import { supabase } from './supabase';
 
 export type Stage = { code: string; seq: number; label: string; owner: 'production' | 'finance' | 'mgmt'; optional_for: 'tpi' | 'rectification' | null };
-export type JobStatus = 'enquiry' | 'quoted' | 'po_received' | 'in_progress' | 'completed' | 'on_hold' | 'cancelled';
+export type JobStatus = 'enquiry' | 'quoted' | 'po_received' | 'in_progress' | 'rfd' | 'completed' | 'on_hold' | 'cancelled';
 
 export type JobRow = {
   id: string; job_no: string; customer_po_no: string | null; po_date: string | null; delivery_date: string | null;
@@ -85,7 +85,7 @@ export const stageLabel = (stages: Stage[], code: string | null) =>
   code ? stages.find((s) => s.code === code)?.label ?? code : 'Not started';
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
-  enquiry: 'Enquiry', quoted: 'Quoted', po_received: 'PO received', in_progress: 'In progress',
+  enquiry: 'Enquiry', quoted: 'Quoted', po_received: 'PO received', in_progress: 'In progress', rfd: 'RFD',
   completed: 'Completed', on_hold: 'On hold', cancelled: 'Cancelled',
 };
 
@@ -151,7 +151,7 @@ export async function getJobFinance(jobId: string, itemIds: string[]) {
   };
 }
 
-export async function updateJob(id: string, patch: Partial<Pick<Job, 'status' | 'tpi_required' | 'tpi_agency' | 'qap_ref' | 'remarks' | 'delivery_date'>>) {
+export async function updateJob(id: string, patch: Partial<Pick<Job, 'status' | 'tpi_required' | 'tpi_agency' | 'qap_ref' | 'remarks' | 'delivery_date'>> & { marked_rfd?: boolean }) {
   must(await supabase.from('jobs').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id).select('id'));
 }
 

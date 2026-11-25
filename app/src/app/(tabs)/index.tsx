@@ -9,12 +9,13 @@ import { date, moneyShort, workAndEntry } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors, space } from '../../theme';
 
-type Filter = 'total' | 'open' | 'ongoing' | 'tpi' | 'completed';
+type Filter = 'total' | 'open' | 'ongoing' | 'rfd' | 'tpi' | 'completed';
 const LATEST = 'latest';
 const REP = 'rep-c-anant';
 const ALL_OPEN = 'all-open';
 const ALL_ONGOING = 'all-ongoing';
-const isAll = (p: string) => p === ALL_OPEN || p === ALL_ONGOING || p === LATEST || p === REP;
+const ALL_RFD = 'all-rfd';
+const isAll = (p: string) => p === ALL_OPEN || p === ALL_ONGOING || p === ALL_RFD || p === LATEST || p === REP;
 /** C Anant & Co. POs: marked on the job, or placed by them as the customer. */
 const isCAnant = (j: JobRow, reps: Record<string, string>) => reps[j.id] === REP_C_ANANT || /^c\s*anant/i.test(j.customer_code ?? '');
 
@@ -30,7 +31,8 @@ function matches(j: JobRow, f: Filter) {
   switch (f) {
     case 'total': return true;
     case 'open': return isPending(j);
-    case 'ongoing': return isPending(j) && isStarted(j);
+    case 'ongoing': return isPending(j) && isStarted(j) && j.status !== 'rfd';
+    case 'rfd': return j.status === 'rfd';
     case 'tpi': return j.tpi_required;
     case 'completed': return j.status === 'completed';
   }
@@ -64,11 +66,12 @@ export default function Jobs() {
     if (period === REP) return jobs.filter((j) => isCAnant(j, data?.reps ?? {}));
     if (period === ALL_OPEN) return jobs.filter(isPending);
     if (period === ALL_ONGOING) return jobs.filter((j) => matches(j, 'ongoing'));
+    if (period === ALL_RFD) return jobs.filter((j) => matches(j, 'rfd'));
     return jobs.filter((j) => fyOf(j.job_no) === period);
   }, [data, period]);
 
   const counts = useMemo(() => {
-    const c = { total: 0, open: 0, ongoing: 0, tpi: 0, completed: 0 } as Record<Filter, number>;
+    const c = { total: 0, open: 0, ongoing: 0, rfd: 0, tpi: 0, completed: 0 } as Record<Filter, number>;
     for (const j of inPeriod) for (const f of Object.keys(c) as Filter[]) if (matches(j, f)) c[f]++;
     return c;
   }, [inPeriod]);
@@ -87,11 +90,12 @@ export default function Jobs() {
     [shown, data, perms.seeMoney],
   );
 
-  const periodOptions = [{ value: LATEST, label: 'Latest updated' }, { value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y })), ...(perms.manageJobs ? [{ value: REP, label: REP_C_ANANT }] : [])];
+  const periodOptions = [{ value: LATEST, label: 'Latest updated' }, { value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, { value: ALL_RFD, label: 'RFD' }, ...years.map((y) => ({ value: y, label: y })), ...(perms.manageJobs ? [{ value: REP, label: REP_C_ANANT }] : [])];
   const filterOptions: { value: Filter; label: string }[] = [
     { value: 'total', label: `Total PO received (${counts.total})` },
     { value: 'open', label: `Open PO (${counts.open})` },
     { value: 'ongoing', label: `PO on-going (${counts.ongoing})` },
+    { value: 'rfd', label: `RFD (${counts.rfd})` },
     { value: 'tpi', label: `TPI (${counts.tpi})` },
     { value: 'completed', label: `Completed (${counts.completed})` },
   ];
@@ -109,7 +113,7 @@ export default function Jobs() {
         <Chips options={periodOptions} value={period} onChange={(v) => { setPeriod(v); setFilter('total'); }} />
         {!isAll(period) && <Chips options={filterOptions} value={filter} onChange={setFilter} />}
         {period !== LATEST && <View style={styles.stats}>
-          <Stat label={period === REP ? `${REP_C_ANANT} POs` : period === ALL_OPEN ? 'Open POs, all years' : period === ALL_ONGOING ? 'Ongoing POs, all years' : 'POs shown'} value={String(shown.length)} />
+          <Stat label={period === REP ? `${REP_C_ANANT} POs` : period === ALL_OPEN ? 'Open POs, all years' : period === ALL_ONGOING ? 'Ongoing POs, all years' : period === ALL_RFD ? 'Ready for despatch, all years' : 'POs shown'} value={String(shown.length)} />
           {periodTotal != null && <Stat label="Value incl. GST" value={moneyShort(periodTotal)} />}
         </View>}
         <View style={styles.search}>
@@ -168,7 +172,7 @@ function stageText(j: JobRow, stages: { seq: number; label: string }[]) {
 }
 
 function JobCard({ job, value, stageLabel }: { job: JobRow; value?: number; stageLabel: string }) {
-  const tone = job.status === 'completed' ? 'good' : job.status === 'cancelled' ? 'bad' : job.status === 'on_hold' ? 'warn' : 'info';
+  const tone = job.status === 'completed' ? 'good' : job.status === 'cancelled' ? 'bad' : job.status === 'rfd' ? 'warn' : job.status === 'on_hold' ? 'warn' : 'info';
   return (
     <Card onPress={() => router.push(`/job/${job.id}`)}>
       <View style={styles.cardHead}>
@@ -190,7 +194,7 @@ function JobCard({ job, value, stageLabel }: { job: JobRow; value?: number; stag
 
 /** Compact square-ish tile for the box view. */
 function JobBox({ job, value, stageLabel, width, items }: { job: JobRow; value?: number; stageLabel: string; width: number; items: string[] }) {
-  const tone = job.status === 'completed' ? colors.good : job.status === 'cancelled' ? colors.bad : job.status === 'on_hold' ? colors.warn : colors.info;
+  const tone = job.status === 'completed' ? colors.good : job.status === 'cancelled' ? colors.bad : job.status === 'rfd' ? colors.accent : job.status === 'on_hold' ? colors.warn : colors.info;
   return (
     <Pressable onPress={() => router.push(`/job/${job.id}`)} style={({ pressed }) => [styles.box, { width, borderTopColor: tone }, pressed && { opacity: 0.7 }]}>
       <View style={styles.cardHead}>

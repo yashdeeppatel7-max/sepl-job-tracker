@@ -16,6 +16,7 @@ const EDITABLE_STATUS: { value: JobStatus; label: string }[] = [
   { value: 'quoted', label: 'Quoted' },
   { value: 'po_received', label: 'PO received' },
   { value: 'in_progress', label: 'In progress' },
+  { value: 'rfd', label: 'RFD (ready for despatch)' },
   { value: 'on_hold', label: 'On hold' },
   { value: 'cancelled', label: 'Cancelled' },
   { value: 'completed', label: 'Completed' },
@@ -46,7 +47,7 @@ export default function JobDetail() {
       <Card>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Title>{job.customers?.code ?? '–'}</Title>
-          <Pill label={JOB_STATUS_LABEL[job.status]} tone={job.status === 'completed' ? 'good' : job.status === 'cancelled' ? 'bad' : 'info'} />
+          <Pill label={JOB_STATUS_LABEL[job.status]} tone={job.status === 'completed' ? 'good' : job.status === 'cancelled' ? 'bad' : job.status === 'rfd' ? 'warn' : 'info'} />
         </View>
         <Row label="Customer PO" value={job.customer_po_no ?? '–'} />
         <Row label="PO date" value={date(job.po_date)} />
@@ -136,7 +137,7 @@ function EditJob({ job, onDone }: { job: Awaited<ReturnType<typeof getJob>>['job
     if (delivery.trim() && !d) return notify('Check the delivery date', 'Use the format 31.12.2026');
     setBusy(true);
     try {
-      await updateJob(job.id, { status, tpi_required: tpi, tpi_agency: agency.trim() || null, qap_ref: qap.trim() || null, remarks: remarks.trim() || null, delivery_date: d });
+      await updateJob(job.id, { status, marked_rfd: status === 'rfd', tpi_required: tpi, tpi_agency: agency.trim() || null, qap_ref: qap.trim() || null, remarks: remarks.trim() || null, delivery_date: d });
       onDone();
     } catch (e: any) {
       notify('Could not save', e.message);

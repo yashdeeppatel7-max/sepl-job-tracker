@@ -357,6 +357,28 @@ insert into pg_temp.results values ('part despatched item stays Part despatched 
   (select current_stage || '/' || current_status from line_items where description = 'PD PP') = 'despatched/in_progress'
   and (select status from jobs where job_no = '26-9100') = 'in_progress');
 
+-- ---------- Ready for despatch (RFD) ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-9200","line_no":1,"customer":"GNFC","description":"RFD A","qty":1},{"job_no":"26-9200","line_no":2,"customer":"GNFC","description":"RFD B","qty":1}]'::jsonb);
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
+insert into stage_events (line_item_id, stage_code) select id, 'rfd' from line_items where description = 'RFD A';
+reset role;
+insert into pg_temp.results values ('one item RFD, other not = PO still in progress',
+  (select status::text from jobs where job_no = '26-9200') = 'in_progress');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
+insert into stage_events (line_item_id, stage_code) select id, 'rfd' from line_items where description = 'RFD B';
+reset role;
+insert into pg_temp.results values ('all items RFD = PO RFD', (select status::text from jobs where job_no = '26-9200') = 'rfd');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+insert into stage_events (line_item_id, stage_code) select id, 'despatched' from line_items where description = 'RFD A';
+reset role;
+insert into pg_temp.results values ('one despatched, other RFD = still RFD', (select status::text from jobs where job_no = '26-9200') = 'rfd');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+insert into stage_events (line_item_id, stage_code) select id, 'despatched' from line_items where description = 'RFD B';
+reset role;
+insert into pg_temp.results values ('all despatched = Completed', (select status::text from jobs where job_no = '26-9200') = 'completed');
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed
