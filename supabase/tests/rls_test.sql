@@ -274,9 +274,9 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role aut
 update invoices set amount = 1000 where invoice_no = '26/700';
 insert into payments (invoice_id, amount, paid_on) select id, 400, '2026-11-15' from invoices where invoice_no = '26/700';
 reset role;
-insert into pg_temp.results values ('part payment = Payment received in progress, PO stays open',
+insert into pg_temp.results values ('part payment = Part paid, fully despatched PO is completed',
   (select current_stage || '/' || current_status from line_items where description = 'PAY A') = 'payment_received/in_progress'
-  and (select status from jobs where job_no = '26-6000') = 'in_progress'
+  and (select status from jobs where job_no = '26-6000') = 'completed'
   and exists (select 1 from stage_events where note = 'From payments' and created_by_name = 'Accounts'));
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
 insert into payments (invoice_id, amount, paid_on) select id, 600, '2026-11-20' from invoices where invoice_no = '26/700';
@@ -344,6 +344,18 @@ insert into invoices (job_id, invoice_no, invoice_date, amount, is_credit_note, 
 reset role;
 insert into pg_temp.results values ('both credited = item Paid',
   (select current_stage || '/' || current_status from line_items where description = 'CN ITEM') = 'payment_received/done');
+
+-- ---------- Part despatched + part paid stays Part despatched, PO open ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-9100","line_no":1,"customer":"GNFC","description":"PD PP","qty":5,"invoices":[{"no":"26/991","date":"2026-08-05"}],"status_text":"Dsp-1 Pending - 03 Nos"}]'::jsonb);
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+update invoices set amount = 1000 where invoice_no = '26/991';
+insert into payments (invoice_id, amount) select id, 1000 from invoices where invoice_no = '26/991';
+reset role;
+insert into pg_temp.results values ('part despatched item stays Part despatched even when its invoice is paid',
+  (select current_stage || '/' || current_status from line_items where description = 'PD PP') = 'despatched/in_progress'
+  and (select status from jobs where job_no = '26-9100') = 'in_progress');
 
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
