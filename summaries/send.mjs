@@ -82,20 +82,13 @@ function daily(d) {
   if (!d.moves.length && !d.despatches.length && !d.invoices.length && !d.payments.length)
     B.push({ p: 'No updates were entered in the app.' });
 
-  // overdue: closest to on-time first, so recent slips are seen; very old ones are only counted
-  const recent = d.overdue.filter((o) => o.late <= 90);
-  const old = d.overdue.length - recent.length;
-  section(B, `Overdue: ${plural(d.overdue.length, 'PO')} past delivery date`, recent,
-    (o) => `<b>${esc(po(o))}</b>: ${plural(o.late, 'day')} late, at ${esc(o.stage)}${o.left > 1 ? ` (${o.left} items left)` : ''}`, ORANGE);
-  if (old) B.push({ p: `${plural(old, 'more PO')} ${old === 1 ? 'is' : 'are'} over 90 days late (old POs to close or update in the app).` });
-
   section(B, `Due in the next 7 days: ${d.due_soon.length}`, d.due_soon,
     (o) => `<b>${esc(po(o))}</b>: ${o.in === 0 ? 'due today' : `in ${plural(o.in, 'day')}`}, at ${esc(o.stage)}`, ORANGE);
 
   section(B, `No update for 10+ days: ${plural(d.idle.length, 'PO')}`, d.idle,
     (o) => `<b>${esc(po(o))}</b>: ${o.days} days, at ${esc(o.stage)}`, ORANGE);
 
-  const subject = `SEPL daily update, ${day(d.today)}: ${plural(d.moves.length + d.despatches.length, 'PO')} moved, ${d.overdue.length} overdue`;
+  const subject = `SEPL daily update, ${day(d.today)}: ${plural(d.moves.length + d.despatches.length, 'PO')} moved, ${d.idle.length} with no update`;
   return { subject, title: `Daily update · ${day(d.today)}`, blocks: B };
 }
 
