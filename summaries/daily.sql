@@ -79,11 +79,9 @@ select json_build_object(
   'despatches', coalesce((select json_agg(json_build_object('job', job_no, 'cust', cust, 'items', items) order by job_no) from desp), '[]'),
   'invoices', coalesce((select json_agg(row_to_json(inv) order by invoice_no) from inv), '[]'),
   'payments', coalesce((select json_agg(row_to_json(pay) order by amount desc) from pay), '[]'),
-  'overdue', coalesce((select json_agg(json_build_object('job', job_no, 'cust', cust, 'late', days_late, 'stage', at_stage, 'left', items_left)
-                                 order by days_late) from o where days_late > 0), '[]'),
   'due_soon', coalesce((select json_agg(json_build_object('job', job_no, 'cust', cust, 'in', -days_late, 'stage', at_stage, 'left', items_left)
                                  order by delivery_date) from o where days_late between -7 and 0), '[]'),
   'idle', coalesce((select json_agg(json_build_object('job', job_no, 'cust', cust, 'days', idle_days, 'stage', at_stage, 'left', items_left)
                                  order by idle_days desc) from o
-                     where idle_days >= 10 and coalesce(days_late, 0) <= 0), '[]')
+                     where idle_days >= 10 and coalesce(days_late, 0) <= 90), '[]')   -- skip very old POs nobody closed
 );

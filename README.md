@@ -104,7 +104,7 @@ The PO Google Sheet can push itself to the app every hour (plus **SEPL App → S
 `.github/workflows/summary-email.yml` sends two emails from a Gmail account (SMTP with an app password):
 
 - **Daily**, Mon–Sat about 8:00 AM India time, to the Director and the CEO: work moved, despatches,
-  invoices and payments since the last email (Monday covers Sat + Sun), plus overdue POs,
+  invoices and payments since the last email (Monday covers Sat + Sun), plus
   POs due in 7 days and POs with no update for 10+ days.
 - **Weekly**, Mondays about 8:15 AM, to the Director only: money customers owe (by age, past due date,
   by customer, oldest), payments received in the last 7 days, and unpaid supplier bills.
