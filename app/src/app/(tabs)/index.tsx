@@ -86,7 +86,6 @@ export default function Jobs() {
     () => (perms.seeMoney && data ? shown.reduce((s, j) => s + (data.values[j.id] ?? 0), 0) : null),
     [shown, data, perms.seeMoney],
   );
-  const overdue = shown.filter((j) => j.overdue).length;
 
   const periodOptions = [{ value: LATEST, label: 'Latest updated' }, { value: ALL_OPEN, label: `All open POs` }, { value: ALL_ONGOING, label: `All ongoing POs` }, ...years.map((y) => ({ value: y, label: y })), ...(perms.manageJobs ? [{ value: REP, label: REP_C_ANANT }] : [])];
   const filterOptions: { value: Filter; label: string }[] = [
@@ -111,7 +110,6 @@ export default function Jobs() {
         {!isAll(period) && <Chips options={filterOptions} value={filter} onChange={setFilter} />}
         {period !== LATEST && <View style={styles.stats}>
           <Stat label={period === REP ? `${REP_C_ANANT} POs` : period === ALL_OPEN ? 'Open POs, all years' : period === ALL_ONGOING ? 'Ongoing POs, all years' : 'POs shown'} value={String(shown.length)} />
-          <Stat label="Overdue" value={String(overdue)} tone={overdue ? colors.bad : undefined} />
           {periodTotal != null && <Stat label="Value incl. GST" value={moneyShort(periodTotal)} />}
         </View>}
         <View style={styles.search}>
@@ -170,12 +168,12 @@ function stageText(j: JobRow, stages: { seq: number; label: string }[]) {
 }
 
 function JobCard({ job, value, stageLabel }: { job: JobRow; value?: number; stageLabel: string }) {
-  const tone = job.status === 'completed' ? 'good' : job.status === 'cancelled' ? 'bad' : job.overdue ? 'bad' : job.status === 'on_hold' ? 'warn' : 'info';
+  const tone = job.status === 'completed' ? 'good' : job.status === 'cancelled' ? 'bad' : job.status === 'on_hold' ? 'warn' : 'info';
   return (
     <Card onPress={() => router.push(`/job/${job.id}`)}>
       <View style={styles.cardHead}>
         <Text style={styles.jobNo}>{job.job_no}</Text>
-        <Pill label={job.overdue ? 'Overdue' : JOB_STATUS_LABEL[job.status]} tone={tone} />
+        <Pill label={JOB_STATUS_LABEL[job.status]} tone={tone} />
       </View>
       <Text style={styles.customer}>{job.customer_code}{job.tpi_required ? '  ·  TPI' : ''}</Text>
       <Muted>PO {job.customer_po_no ?? '–'}  ·  Due {date(job.delivery_date)}</Muted>
@@ -192,14 +190,12 @@ function JobCard({ job, value, stageLabel }: { job: JobRow; value?: number; stag
 
 /** Compact square-ish tile for the box view. */
 function JobBox({ job, value, stageLabel, width }: { job: JobRow; value?: number; stageLabel: string; width: number }) {
-  const tone = job.status === 'completed' ? colors.good : job.status === 'cancelled' || job.overdue ? colors.bad : job.status === 'on_hold' ? colors.warn : colors.info;
+  const tone = job.status === 'completed' ? colors.good : job.status === 'cancelled' ? colors.bad : job.status === 'on_hold' ? colors.warn : colors.info;
   return (
     <Pressable onPress={() => router.push(`/job/${job.id}`)} style={({ pressed }) => [styles.box, { width, borderTopColor: tone }, pressed && { opacity: 0.7 }]}>
       <View style={styles.cardHead}>
         <Text style={styles.boxNo} numberOfLines={1}>{job.job_no}</Text>
-        {job.overdue
-          ? <Text style={[styles.boxTag, { color: colors.bad }]}>Overdue</Text>
-          : <Text style={[styles.boxTag, { color: tone }]} numberOfLines={1}>{JOB_STATUS_LABEL[job.status]}</Text>}
+        <Text style={[styles.boxTag, { color: tone }]} numberOfLines={1}>{JOB_STATUS_LABEL[job.status]}</Text>
       </View>
       <Text style={styles.boxCustomer} numberOfLines={1}>{job.customer_code}{job.tpi_required ? '  ·  TPI' : ''}</Text>
       <Text style={styles.boxMuted} numberOfLines={1}>Due {date(job.delivery_date)}</Text>
