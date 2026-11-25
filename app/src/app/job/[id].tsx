@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section, Title, Toggle } from '../../components/ui';
 import {
-  getJob, getJobFinance, getStages, listJobReps, REP_C_ANANT, setJobRep, isCancelStage, itemStageText, JOB_STATUS_LABEL, updateJob, type JobStatus,
+  getJob, getJobFinance, getStages, invoicePill, listJobReps, REP_C_ANANT, setJobRep, isCancelStage, itemStageText, JOB_STATUS_LABEL, updateJob, type JobStatus,
 } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, money, parseUserDate, toUserDate } from '../../lib/format';
@@ -99,9 +99,9 @@ export default function JobDetail() {
             <Card key={inv.id} onPress={() => router.push(`/invoice/${inv.id}`)}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text style={{ fontWeight: '600', color: colors.text }}>{inv.invoice_no}  ·  {date(inv.invoice_date)}</Text>
-                <Pill label={(inv.amount ?? 0) < 0 ? 'Credit note' : inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad'} />
+                <Pill {...invoicePill(inv)} />
               </View>
-              <Muted>{money(inv.amount)}  ·  received {money(inv.paid_amount)}</Muted>
+              <Muted>{money(inv.amount)}  ·  received {money(inv.paid_amount)}{inv.credited_amount > 0 ? `  ·  credit notes ${money(inv.credited_amount)}` : ''}{inv.is_credit_note && inv.against_invoice_id ? `  ·  against ${fin.invoices.find((x) => x.id === inv.against_invoice_id)?.invoice_no ?? ''}` : ''}</Muted>
             </Card>
           ))}
         </Section>

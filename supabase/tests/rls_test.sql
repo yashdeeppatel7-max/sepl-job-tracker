@@ -323,6 +323,28 @@ insert into pg_temp.results values ('paid net of credit note = item Paid and PO 
   (select current_stage || '/' || current_status from line_items where description = 'NET A') = 'payment_received/done'
   and (select status from jobs where job_no = '26-8000') = 'completed');
 
+-- ---------- Credit note against an invoice settles it ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-9000","line_no":1,"customer":"GNFC","description":"CN ITEM","qty":5,"invoices":[{"no":"26/951","date":"2026-08-05"},{"no":"26/958","date":"2026-08-24"}],"status_text":"Complete"}]'::jsonb);
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+update invoices set amount = 213344 where invoice_no = '26/951';
+update invoices set amount = 53336 where invoice_no = '26/958';
+insert into invoices (job_id, invoice_no, invoice_date, amount, is_credit_note, against_invoice_id)
+  select job_id, 'CN-04', '2026-09-16', -213344, true, id from invoices where invoice_no = '26/951';
+reset role;
+insert into pg_temp.results values ('credit note against invoice = invoice paid off, other still unpaid',
+  (select payment_status from invoice_status where invoice_no = '26/951') = 'paid'
+  and (select credited_amount from invoice_status where invoice_no = '26/951') = 213344
+  and (select payment_status from invoice_status where invoice_no = '26/958') = 'unpaid'
+  and (select current_stage || '/' || current_status from line_items where description = 'CN ITEM') = 'payment_received/in_progress');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+insert into invoices (job_id, invoice_no, invoice_date, amount, is_credit_note, against_invoice_id)
+  select job_id, 'CN-05', '2026-09-16', -53336, true, id from invoices where invoice_no = '26/958';
+reset role;
+insert into pg_temp.results values ('both credited = item Paid',
+  (select current_stage || '/' || current_status from line_items where description = 'CN ITEM') = 'payment_received/done');
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed

@@ -3,7 +3,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Screen, Section, Toggle } from '../../components/ui';
-import { addStageEvent, deleteStageEvent, getItem, listItemInvoices, updateStageEvent, getStages, isCancelStage, itemStageText, REJECT_STAGE, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
+import { addStageEvent, deleteStageEvent, getItem, invoicePill, listItemInvoices, updateStageEvent, getStages, isCancelStage, itemStageText, REJECT_STAGE, setNeedsRectification, stageLabel, type Stage } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, money, parseUserDate, todayIso, toUserDate, workAndEntry } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
@@ -170,8 +170,7 @@ export default function ItemDetail() {
             <Card key={inv.id} onPress={() => router.push(`/invoice/${inv.id}`)}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={{ fontWeight: '700', color: colors.text }}>{inv.is_credit_note ? 'Credit note' : 'Inv'} {inv.invoice_no}</Text>
-                <Pill label={inv.is_credit_note ? 'Credit note' : inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'}
-                  tone={inv.is_credit_note ? 'neutral' : inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad'} />
+                <Pill {...invoicePill(inv)} />
               </View>
               <Muted>{date(inv.invoice_date)}  ·  {inv.amount == null ? 'amount not entered' : money(inv.amount)}</Muted>
             </Card>

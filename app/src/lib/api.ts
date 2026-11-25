@@ -42,7 +42,20 @@ export type InvoiceRow = {
   id: string; job_id: string; invoice_no: string; invoice_date: string | null; amount: number | null;
   due_date: string | null; notes: string | null; job_no: string; customer_code: string | null;
   paid_amount: number; payment_status: 'paid' | 'part_paid' | 'unpaid';
+  credited_amount: number; is_credit_note: boolean; against_invoice_id: string | null;
 };
+
+/** What the customer still owes on an invoice (after payments and credit notes against it). */
+export const invoiceBalance = (i: { amount: number | null; paid_amount: number; credited_amount?: number; is_credit_note?: boolean; settled?: boolean }) =>
+  i.is_credit_note || (i as any).settled || i.amount == null ? 0 : Math.max(0, i.amount - i.paid_amount - (i.credited_amount ?? 0));
+
+export function invoicePill(i: { amount: number | null; paid_amount: number; payment_status: string; credited_amount?: number; is_credit_note?: boolean }) {
+  if (i.is_credit_note || (i.amount ?? 0) < 0) return { label: 'Credit note', tone: 'neutral' as const };
+  if (i.payment_status === 'paid') return (i.credited_amount ?? 0) > 0 && i.paid_amount === 0
+    ? { label: 'Settled by credit note', tone: 'good' as const } : { label: 'Paid', tone: 'good' as const };
+  if (i.payment_status === 'part_paid') return { label: 'Part paid', tone: 'warn' as const };
+  return { label: 'Unpaid', tone: 'bad' as const };
+}
 
 export type DespatchRow = {
   id: string; job_id: string; job_no: string; customer_code: string | null; despatched_on: string;
@@ -189,9 +202,9 @@ export async function getItem(id: string) {
 export async function listItemInvoices(itemId: string) {
   const links = must(await supabase.from('invoice_items').select('invoice_id').eq('line_item_id', itemId)) as { invoice_id: string }[];
   if (!links.length) return [];
-  return must(await supabase.from('invoice_status').select('id, invoice_no, invoice_date, amount, paid_amount, payment_status, is_credit_note')
+  return must(await supabase.from('invoice_status').select('id, invoice_no, invoice_date, amount, paid_amount, credited_amount, payment_status, is_credit_note')
     .in('id', links.map((l) => l.invoice_id)).order('invoice_date', { ascending: true })) as
-    { id: string; invoice_no: string; invoice_date: string | null; amount: number | null; paid_amount: number; payment_status: string; is_credit_note: boolean }[];
+    { id: string; invoice_no: string; invoice_date: string | null; amount: number | null; paid_amount: number; credited_amount: number; payment_status: string; is_credit_note: boolean }[];
 }
 
 export async function addStageEvent(e: {
@@ -255,7 +268,7 @@ export async function deletePayment(id: string) {
   must(await supabase.from('payments').delete().eq('id', id).select('id'));
 }
 
-export async function updateInvoice(id: string, patch: { amount?: number | null; due_date?: string | null; notes?: string | null; invoice_no?: string; invoice_date?: string | null }) {
+export async function updateInvoice(id: string, patch: { against_invoice_id?: string | null; amount?: number | null; due_date?: string | null; notes?: string | null; invoice_no?: string; invoice_date?: string | null }) {
   must(await supabase.from('invoices').update(patch).eq('id', id).select('id'));
 }
 
@@ -264,10 +277,10 @@ export async function addPayment(invoice_id: string, amount: number, paid_on: st
 }
 
 /** Creates an invoice for some items of a job and marks them "Invoice prepared". */
-export async function createInvoice(job_id: string, invoice_no: string, invoice_date: string, itemIds: string[], amount: number | null, creditNote = false) {
+export async function createInvoice(job_id: string, invoice_no: string, invoice_date: string, itemIds: string[], amount: number | null, creditNote = false, againstId: string | null = null) {
   const amt = creditNote && amount != null ? -Math.abs(amount) : amount;
   const row: Record<string, unknown> = { job_id, invoice_no: invoice_no.trim(), invoice_date, amount: amt };
-  if (creditNote) row.is_credit_note = true;
+  if (creditNote) { row.is_credit_note = true; row.against_invoice_id = againstId; }
   const inv = must(await supabase.from('invoices').insert(row).select('id').single()) as { id: string };
   if (itemIds.length) {
     must(await supabase.from('invoice_items').insert(itemIds.map((line_item_id) => ({ invoice_id: inv.id, line_item_id }))).select('invoice_id'));

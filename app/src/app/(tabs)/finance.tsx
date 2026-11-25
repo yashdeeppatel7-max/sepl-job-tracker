@@ -3,7 +3,7 @@ import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Card, Chips, Empty, ErrorBox, Loading, Muted, Pill } from '../../components/ui';
-import { listBills, listInvoices, markBillPaid, type InvoiceRow, type VendorBill } from '../../lib/api';
+import { invoiceBalance, invoicePill, listBills, listInvoices, markBillPaid, type InvoiceRow, type VendorBill } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { date, money, moneyShort } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
@@ -23,7 +23,7 @@ export default function Finance() {
 
   const totals = useMemo(() => {
     const inv = data?.invoices ?? [];
-    const outstanding = inv.reduce((s, i) => s + Math.max(0, (i.amount ?? 0) - i.paid_amount), 0);
+    const outstanding = inv.reduce((s, i) => s + invoiceBalance(i), 0);
     const billsDue = (data?.bills ?? []).filter((b) => !b.paid).reduce((s, b) => s + b.amount, 0);
     return { outstanding, billsDue };
   }, [data]);
@@ -74,16 +74,16 @@ export default function Finance() {
 }
 
 function InvoiceCard({ inv }: { inv: InvoiceRow }) {
-  const tone = inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad';
+  const pill = invoicePill(inv);
   return (
     <Card onPress={() => router.push(`/invoice/${inv.id}`)}>
       <View style={styles.head}>
-        <Text style={styles.strong}>Inv {inv.invoice_no}</Text>
-        <Pill label={(inv.amount ?? 0) < 0 ? 'Credit note' : inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={tone} />
+        <Text style={styles.strong}>{inv.is_credit_note ? 'Credit note' : 'Inv'} {inv.invoice_no}</Text>
+        <Pill label={pill.label} tone={pill.tone} />
       </View>
       <Muted>{inv.customer_code}  ·  Job {inv.job_no}  ·  {date(inv.invoice_date)}</Muted>
       <View style={styles.head}>
-        <Muted>Received {money(inv.paid_amount)}</Muted>
+        <Muted>Received {money(inv.paid_amount)}{inv.credited_amount > 0 ? `  ·  credit notes ${money(inv.credited_amount)}` : ''}</Muted>
         <Text style={styles.amount}>{inv.amount == null ? 'Amount not set' : money(inv.amount)}</Text>
       </View>
     </Card>

@@ -1,8 +1,8 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { Button, Card, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section, Toggle } from '../../components/ui';
-import { addPayment, deleteInvoice, deletePayment, getInvoice, getJob, setInvoiceItems, updateInvoice } from '../../lib/api';
+import { Button, Card, Chips, ErrorBox, Field, Loading, Muted, Pill, Row, Screen, Section, Toggle } from '../../components/ui';
+import { addPayment, deleteInvoice, deletePayment, getInvoice, getJob, getJobFinance, invoiceBalance, invoicePill, setInvoiceItems, updateInvoice } from '../../lib/api';
 import { date, money, parseNumber, parseUserDate, todayIso, toUserDate } from '../../lib/format';
 import { useQuery } from '../../lib/useQuery';
 import { colors } from '../../theme';
@@ -21,7 +21,7 @@ export default function InvoiceDetail() {
   if (error) return <Screen><ErrorBox message={error} /></Screen>;
   if (!data) return <Loading />;
   const { invoice: inv, payments, items } = data;
-  const balance = (inv.amount ?? 0) - inv.paid_amount;
+  const balance = invoiceBalance(inv);
 
   async function pay() {
     const a = parseNumber(amount);
@@ -43,11 +43,13 @@ export default function InvoiceDetail() {
       <Card>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>{inv.customer_code}  ·  {inv.job_no}</Text>
-          <Pill label={(inv.amount ?? 0) < 0 ? 'Credit note' : inv.payment_status === 'paid' ? 'Paid' : inv.payment_status === 'part_paid' ? 'Part paid' : 'Unpaid'} tone={inv.payment_status === 'paid' ? 'good' : inv.payment_status === 'part_paid' ? 'warn' : 'bad'} />
+          <Pill {...invoicePill(inv)} />
         </View>
         <Row label="Invoice date" value={date(inv.invoice_date)} />
         <Row label="Amount (incl. GST)" value={inv.amount == null ? 'Not entered' : money(inv.amount)} />
         <Row label="Received" value={money(inv.paid_amount)} />
+        {inv.is_credit_note && inv.against_invoice_id ? <Text style={{ color: colors.info, fontWeight: '600' }} onPress={() => router.push(`/invoice/${inv.against_invoice_id}`)}>Open the invoice this credit note is against</Text> : null}
+        {inv.credited_amount > 0 ? <Row label="Credit notes against it" value={money(inv.credited_amount)} /> : null}
         <Row label="Balance" value={inv.amount == null ? '–' : money(balance)} />
         {inv.amount == null ? <Muted>The amount isn't known yet (an item may be split over more than one invoice). Tap Edit invoice to enter it.</Muted> : null}
         {(inv as any).edited_at ? <Muted>Edited{(inv as any).edited_by_name ? ` by ${(inv as any).edited_by_name}` : ''} on {date(String((inv as any).edited_at).slice(0, 10))}</Muted> : null}
@@ -89,10 +91,13 @@ export default function InvoiceDetail() {
 }
 
 function EditInvoice({ inv, linked, hasPayments, onDone }: {
-  inv: { id: string; job_id: string; invoice_no: string; invoice_date: string | null; amount: number | null };
+  inv: { id: string; job_id: string; invoice_no: string; invoice_date: string | null; amount: number | null; is_credit_note?: boolean; against_invoice_id?: string | null };
   linked: string[]; hasPayments: boolean; onDone: (deleted?: boolean) => void;
 }) {
   const { data: job } = useQuery(() => getJob(inv.job_id), [inv.job_id]);
+  const { data: fin } = useQuery(() => inv.is_credit_note ? getJobFinance(inv.job_id, []) : Promise.resolve(null), [inv.job_id, inv.is_credit_note]);
+  const billed = (fin?.invoices ?? []).filter((i) => !i.is_credit_note && (i.amount ?? 0) >= 0);
+  const [against, setAgainst] = useState<string>(inv.against_invoice_id ?? '');
   const [no, setNo] = useState(inv.invoice_no);
   const [on, setOn] = useState(toUserDate(inv.invoice_date));
   const [amt, setAmt] = useState(inv.amount?.toString() ?? '');
@@ -108,7 +113,7 @@ function EditInvoice({ inv, linked, hasPayments, onDone }: {
     if (amt.trim() && a == null) return notify('Check the amount');
     setBusy(true);
     try {
-      await updateInvoice(inv.id, { invoice_no: no.trim(), invoice_date: d, amount: a });
+      await updateInvoice(inv.id, { invoice_no: no.trim(), invoice_date: d, amount: inv.is_credit_note && a != null ? -Math.abs(a) : a, ...(inv.is_credit_note ? { against_invoice_id: against || null } : {}) });
       const ids = Object.keys(picked).filter((k) => picked[k]);
       if (ids.sort().join() !== [...linked].sort().join()) await setInvoiceItems(inv.id, ids);
       onDone();
@@ -124,6 +129,10 @@ function EditInvoice({ inv, linked, hasPayments, onDone }: {
       <Field label="Invoice no." value={no} onChangeText={setNo} autoCapitalize="characters" />
       <Field label="Invoice date" value={on} onChangeText={setOn} placeholder="31.12.2026" />
       <Field label="Amount incl. GST (₹)" value={amt} onChangeText={setAmt} keyboardType="decimal-pad" />
+      {inv.is_credit_note && billed.length > 0 && <>
+        <Muted>Against invoice</Muted>
+        <Chips options={billed.map((i) => ({ value: i.id, label: i.invoice_no }))} value={against} onChange={setAgainst} />
+      </>}
       <Muted>Items on this invoice</Muted>
       {!job ? <Muted>Loading items…</Muted> : job.items.map((it) => (
         <Toggle key={it.id} label={`${it.line_no}. ${it.description.slice(0, 60)}`} value={!!picked[it.id]} onChange={(v) => setPicked({ ...picked, [it.id]: v })} />
