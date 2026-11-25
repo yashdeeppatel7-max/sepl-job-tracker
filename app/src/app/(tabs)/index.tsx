@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Card, Chips, Empty, ErrorBox, Loading, Muted, Pill, ProgressBar } from '../../components/ui';
 import { getStages, isCancelStage, itemStageText, JOB_STATUS_LABEL, listJobs, listJobValues, listJobReps, listRecentUpdates, REJECT_STAGE, REP_C_ANANT, type JobRow, type RecentUpdate } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -42,6 +42,11 @@ export default function Jobs() {
   const [filter, setFilter] = useState<Filter>('total');
   const [q, setQ] = useState('');
   const [openPo, setOpenPo] = useState<string | null>(null);
+  const [boxes, setBoxesState] = useState<boolean>(() => { try { return globalThis.localStorage?.getItem('jobsView') !== 'list'; } catch { return true; } });
+  const setBoxes = (v: boolean) => { setBoxesState(v); try { globalThis.localStorage?.setItem('jobsView', v ? 'boxes' : 'list'); } catch { /* ignore */ } };
+  const { width } = useWindowDimensions();
+  const cols = boxes ? Math.max(2, Math.min(6, Math.floor((width - space.md * 2) / 220))) : 1;
+  const boxW = (width - space.md * 2 - space.sm * (cols - 1)) / cols;
   const { data, error, loading, reload } = useQuery(async () => {
     const [jobs, values, stages, recent, reps] = await Promise.all([listJobs(), perms.seeMoney ? listJobValues() : Promise.resolve({}), getStages(), listRecentUpdates(15),
       perms.manageJobs ? listJobReps() : Promise.resolve({} as Record<string, string>)]);
@@ -112,6 +117,14 @@ export default function Jobs() {
         <View style={styles.search}>
           <Ionicons name="search" size={18} color={colors.textFaint} />
           <TextInput value={q} onChangeText={setQ} placeholder="Job no, customer or PO no" placeholderTextColor={colors.textFaint} style={styles.searchInput} autoCapitalize="none" />
+          {period !== LATEST && <>
+            <Pressable onPress={() => setBoxes(true)} accessibilityLabel="Box view" hitSlop={6}>
+              <Ionicons name="grid" size={20} color={boxes ? colors.primary : colors.textFaint} />
+            </Pressable>
+            <Pressable onPress={() => setBoxes(false)} accessibilityLabel="List view" hitSlop={6}>
+              <Ionicons name="list" size={24} color={!boxes ? colors.primary : colors.textFaint} />
+            </Pressable>
+          </>}
         </View>
       </View>
       {error && <View style={{ padding: space.md }}><ErrorBox message={error} /></View>}
@@ -132,12 +145,17 @@ export default function Jobs() {
         />
       ) : (
         <FlatList
+          key={`cols-${cols}`}
           data={shown}
+          numColumns={cols}
           keyExtractor={(j) => j.id}
           contentContainerStyle={{ padding: space.md, paddingTop: 0, gap: space.sm }}
+          columnWrapperStyle={cols > 1 ? { gap: space.sm } : undefined}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
           ListEmptyComponent={<Empty text="No jobs match." />}
-          renderItem={({ item }) => <JobCard job={item} value={data?.values[item.id]} stageLabel={stageText(item, data!.stages)} />}
+          renderItem={({ item }) => cols > 1
+            ? <JobBox width={boxW} job={item} value={data?.values[item.id]} stageLabel={stageText(item, data!.stages)} />
+            : <JobCard job={item} value={data?.values[item.id]} stageLabel={stageText(item, data!.stages)} />}
         />
       )}
     </View>
@@ -172,6 +190,30 @@ function JobCard({ job, value, stageLabel }: { job: JobRow; value?: number; stag
   );
 }
 
+/** Compact square-ish tile for the box view. */
+function JobBox({ job, value, stageLabel, width }: { job: JobRow; value?: number; stageLabel: string; width: number }) {
+  const tone = job.status === 'completed' ? colors.good : job.status === 'cancelled' || job.overdue ? colors.bad : job.status === 'on_hold' ? colors.warn : colors.info;
+  return (
+    <Pressable onPress={() => router.push(`/job/${job.id}`)} style={({ pressed }) => [styles.box, { width, borderTopColor: tone }, pressed && { opacity: 0.7 }]}>
+      <View style={styles.cardHead}>
+        <Text style={styles.boxNo} numberOfLines={1}>{job.job_no}</Text>
+        {job.overdue
+          ? <Text style={[styles.boxTag, { color: colors.bad }]}>Overdue</Text>
+          : <Text style={[styles.boxTag, { color: tone }]} numberOfLines={1}>{JOB_STATUS_LABEL[job.status]}</Text>}
+      </View>
+      <Text style={styles.boxCustomer} numberOfLines={1}>{job.customer_code}{job.tpi_required ? '  ·  TPI' : ''}</Text>
+      <Text style={styles.boxMuted} numberOfLines={1}>Due {date(job.delivery_date)}</Text>
+      <Text style={styles.boxMuted} numberOfLines={1}>{stageLabel}</Text>
+      <View style={{ flex: 1 }} />
+      <View style={styles.cardHead}>
+        <Text style={styles.boxMuted}>{job.items_despatched}/{job.item_count} despatched</Text>
+        {value != null && <Text style={styles.boxValue}>{moneyShort(value)}</Text>}
+      </View>
+      <ProgressBar value={job.item_count ? job.items_despatched / job.item_count : 0} />
+    </Pressable>
+  );
+}
+
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <View style={styles.stat}>
@@ -195,6 +237,13 @@ const styles = StyleSheet.create({
   customer: { fontSize: 15, color: colors.text, fontWeight: '500' },
   cardFoot: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md, marginTop: 4 },
   value: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  box: { minHeight: 150, backgroundColor: colors.surface, borderRadius: 12, padding: space.sm, gap: 3,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderTopWidth: 4 },
+  boxNo: { fontSize: 16, fontWeight: '700', color: colors.text },
+  boxTag: { fontSize: 11, fontWeight: '700' },
+  boxCustomer: { fontSize: 14, fontWeight: '600', color: colors.text },
+  boxMuted: { fontSize: 12, color: colors.textMuted },
+  boxValue: { fontSize: 13, fontWeight: '700', color: colors.primary },
 });
 
 type PoGroup = { jobId: string; jobNo: string; customer: string; updates: RecentUpdate[] };
