@@ -440,6 +440,16 @@ insert into pg_temp.results values ('sheet check finds a PO wrongly shown Comple
   exists (select 1 from public.sheet_check() where job_no = '26-9300' and area = 'PO status'));
 reset role;
 
+
+-- ---------- Finance check: a PO billed twice is caught ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+insert into invoices (job_id, invoice_no, invoice_date, amount) select id, 'DUP-1', '2026-09-02', 500000 from jobs where job_no = '26-7000';
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001'; set role authenticated;
+insert into pg_temp.results values ('finance check: PO invoiced above its value is listed',
+  exists (select 1 from public.sheet_check() where job_no = '26-7000' and area = 'Finance' and problem like 'Invoices on this PO add up%'));
+reset role;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed
