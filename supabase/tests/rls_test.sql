@@ -399,6 +399,26 @@ reset role;
 insert into pg_temp.results values ('invoice on two POs, paid = both items Paid',
   (select count(*) from line_items where description like 'SHARED %' and current_stage = 'payment_received' and current_status = 'done') = 2);
 
+
+-- ---------- "cancelled" written in the sheet's invoice column cancels the item ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-9500","line_no":1,"customer":"GNFC","description":"CXL A","qty":1,"invoices":[{"no":"26/950","date":"2026-09-01"}],"status_text":"Complete"},
+                               {"job_no":"26-9500","line_no":2,"customer":"GNFC","description":"CXL B","qty":1,"finance_notes":"Invoice cell: cancelled"},
+                               {"job_no":"26-9501","line_no":1,"customer":"GNFC","description":"CXL C","qty":2,"finance_notes":"Status: email regreted sent | Invoice cell: cancelled"}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('item cancelled in the sheet = Item cancelled, rest despatched = PO Completed',
+  (select current_stage from line_items where description = 'CXL B') = 'item_cancelled'
+  and (select status::text from jobs where job_no = '26-9500') = 'completed');
+insert into pg_temp.results values ('only item cancelled in the sheet = PO Cancelled',
+  (select status::text from jobs where job_no = '26-9501') = 'cancelled');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-9500","line_no":1,"customer":"GNFC","description":"CXL A","qty":1,"invoices":[{"no":"26/950","date":"2026-09-01"}],"status_text":"Complete"},
+                               {"job_no":"26-9500","line_no":2,"customer":"GNFC","description":"CXL B","qty":1}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('cancel word removed from the sheet = item open again, PO not Completed',
+  (select current_stage from line_items where description = 'CXL B') is null
+  and (select status::text from jobs where job_no = '26-9500') <> 'completed');
+
 -- ---------- Sheet check ----------
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
 do $$ begin perform public.sheet_check(); raise exception 'no error'; exception when insufficient_privilege then null; end $$;
@@ -407,7 +427,7 @@ insert into pg_temp.results values ('Production cannot run the sheet check', tru
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
 insert into pg_temp.results values ('Production cannot read the saved sheet rows', (select count(*) from sheet_rows) = 0);
 reset role;
-insert into pg_temp.results values ('sync saves the sheet rows', (select count(*) from sheet_rows where job_no = '26-9401') = 1);
+insert into pg_temp.results values ('sync saves the sheet rows', (select count(*) from sheet_rows where job_no = '26-9500') = 2);
 set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001'; set role authenticated;
 create temp table chk as select * from public.sheet_check();
 reset role;
