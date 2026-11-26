@@ -386,3 +386,13 @@ export async function lastSync(): Promise<SyncRun | null> {
   if (error) return null; // table not created yet
   return (data?.[0] as SyncRun) ?? null;
 }
+
+// ---------- Sheet check (sheet vs app) ----------
+export type SheetProblem = { job_no: string; line_no: number | null; area: string; problem: string; sheet: string | null; app: string | null; serious: boolean };
+export async function runSheetCheck(): Promise<{ problems: SheetProblem[]; jobIds: Record<string, string> }> {
+  const [problems, jobs] = await Promise.all([
+    supabase.rpc('sheet_check').then(must) as Promise<SheetProblem[]>,
+    supabase.from('jobs').select('id, job_no').then(must) as Promise<{ id: string; job_no: string }[]>,
+  ]);
+  return { problems: problems ?? [], jobIds: Object.fromEntries((jobs ?? []).map((j) => [j.job_no, j.id])) };
+}

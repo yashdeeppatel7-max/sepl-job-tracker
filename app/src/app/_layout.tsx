@@ -32,6 +32,7 @@ function RootStack() {
         <Stack.Screen name="bill/new" options={{ title: 'New vendor bill' }} />
         <Stack.Screen name="users" options={{ title: 'Users & roles' }} />
         <Stack.Screen name="import" options={{ title: 'Import from Excel' }} />
+        <Stack.Screen name="sheet-check" options={{ title: 'Sheet check' }} />
         <Stack.Screen name="password" options={{ title: 'Change password' }} />
       </Stack.Protected>
     </Stack>

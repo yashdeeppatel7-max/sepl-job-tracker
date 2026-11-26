@@ -379,6 +379,47 @@ insert into stage_events (line_item_id, stage_code) select id, 'despatched' from
 reset role;
 insert into pg_temp.results values ('all despatched = Completed', (select status::text from jobs where job_no = '26-9200') = 'completed');
 
+
+-- ---------- Item added after the others were despatched: PO goes back to Ongoing ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-9300","line_no":1,"customer":"GNFC","description":"LATE A","qty":1,"invoices":[{"no":"26/930","date":"2026-09-01"}],"status_text":"Complete"},
+                               {"job_no":"26-9300","line_no":2,"customer":"GNFC","description":"LATE B","qty":1}]'::jsonb);
+reset role;
+insert into pg_temp.results values ('last item not despatched = PO not Completed (import order)',
+  (select status::text from jobs where job_no = '26-9300') <> 'completed');
+
+-- ---------- One invoice on two POs: a payment shows Paid on both ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000003'; set role authenticated;
+select public.import_po_rows('[{"job_no":"26-9400","line_no":1,"customer":"GNFC","description":"SHARED A","qty":1,"total_value":100,"invoices":[{"no":"26/940","date":"2026-09-01"}],"status_text":"Complete"},
+                               {"job_no":"26-9401","line_no":1,"customer":"GNFC","description":"SHARED B","qty":1,"total_value":50,"invoices":[{"no":"26/940","date":"2026-09-01"}],"status_text":"Complete"}]'::jsonb);
+reset role;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000004'; set role authenticated;
+insert into payments (invoice_id, amount) select id, amount from invoices where invoice_no = '26/940';
+reset role;
+insert into pg_temp.results values ('invoice on two POs, paid = both items Paid',
+  (select count(*) from line_items where description like 'SHARED %' and current_stage = 'payment_received' and current_status = 'done') = 2);
+
+-- ---------- Sheet check ----------
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
+do $$ begin perform public.sheet_check(); raise exception 'no error'; exception when insufficient_privilege then null; end $$;
+reset role;
+insert into pg_temp.results values ('Production cannot run the sheet check', true);
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005'; set role authenticated;
+insert into pg_temp.results values ('Production cannot read the saved sheet rows', (select count(*) from sheet_rows) = 0);
+reset role;
+insert into pg_temp.results values ('sync saves the sheet rows', (select count(*) from sheet_rows where job_no = '26-9401') = 1);
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001'; set role authenticated;
+create temp table chk as select * from public.sheet_check();
+reset role;
+insert into pg_temp.results values ('sheet check: no Paid / PO status / stage problems',
+  not exists (select 1 from chk where area in ('Payment','PO status','Stage') and job_no like '26-9%'));
+-- break something on purpose: the check must notice
+update jobs set status = 'completed' where job_no = '26-9300';
+set request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001'; set role authenticated;
+insert into pg_temp.results values ('sheet check finds a PO wrongly shown Completed',
+  exists (select 1 from public.sheet_check() where job_no = '26-9300' and area = 'PO status'));
+reset role;
+
 select case when ok then 'PASS' else 'FAIL' end as result, name from pg_temp.results;
 select count(*) filter (where not ok) > 0 as failed, count(*) filter (where not ok) as failures from pg_temp.results \gset
 \if :failed

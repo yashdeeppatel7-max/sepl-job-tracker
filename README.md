@@ -91,6 +91,13 @@ The PO Google Sheet can push itself to the app every hour (plus **SEPL App → S
 ## Automatic database changes
 `.github/workflows/db-migrate.yml` applies any new or changed file in `supabase/migrations/` to Supabase when it is pushed to `main` (each file in one transaction; files are written to be safe to run again). It can also re-apply one file from **Actions → Apply database changes → Run workflow**. One-time setup: add the repository secret `SUPABASE_DB_URL` = Supabase **Connect → Session pooler** connection string with the database password filled in.
 
+## Sheet check (sheet vs app)
+Every sheet sync saves the rows it sent (`sheet_rows`). `sheet_check()` (migration 0022) compares them with the app: items and quantities, invoices (missing, wrong item/PO, dates, amounts), despatch / part despatch / cancelled, credit notes the sheet mentions, Paid / Part paid against payments, item stages against their history, and PO status (Ongoing / RFD / Completed / Cancelled). "Needs fixing" rows mean the app is wrong; "To check" rows usually need someone to fill something in.
+- In the app: **More → Sheet check** (Director, CEO, Admin). Tap a row to open the PO.
+- Before going live: the "Apply database changes" workflow first runs the tests on a throw-away database, then tries the new files on the live database inside a transaction that is rolled back and compares the Sheet check before and after. If a change would add new "needs fixing" problems, nothing is applied. The log shows counts only (the repository is public).
+- `.github/workflows/db-tests.yml` runs the tests on every pull request that touches `supabase/`.
+- Locally: `DB_URL=... supabase/check/dry-run.sh file.sql`, or `psql -f supabase/check/counts.sql`.
+
 ## Database backup
 `.github/workflows/db-backup.yml` backs up the Supabase database every Monday at 3:00 AM India time (the free plan has no downloadable backups). It can also be run any time from **Actions → Weekly database backup → Run workflow**.
 
