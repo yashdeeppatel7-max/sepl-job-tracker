@@ -11,6 +11,11 @@ out=$(mktemp)
   echo 'begin;'
   echo "create temp table _before as select serious, area, problem from public.sheet_check();"
   for f in "$@"; do echo "\\echo == trying $f"; echo "\\i $f"; done
+  # then replay the last sheet sync, as the next hourly sync would (as a Director, so the import is allowed)
+  echo "\\echo == replaying the last sheet sync"
+  echo "select 'as Director' as replay from (select set_config('request.jwt.claims', json_build_object('sub', (select id from profiles where role = 'director' order by created_at limit 1), 'role', 'authenticated')::text, true),
+               set_config('request.jwt.claim.sub', (select id from profiles where role = 'director' order by created_at limit 1)::text, true)) x;"
+  echo "select public.import_po_rows(rows) is not null as synced from (select jsonb_agg(row order by job_no, line_no) as rows from sheet_rows) x where rows is not null;"
   echo "create temp table _after as select serious, area, problem from public.sheet_check();"
   echo "\\echo == Sheet check before -> after (counts only)"
   echo "select coalesce(a.area, b.area) as area, coalesce(a.problem, b.problem) as problem,
