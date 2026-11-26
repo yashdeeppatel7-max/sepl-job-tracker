@@ -15,6 +15,14 @@ concurrency: db-migrate
 jobs:
   migrate:
     runs-on: ubuntu-latest
+    services:
+      postgres:   # throw-away database for the tests below
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,14 +47,40 @@ jobs:
             git diff --name-only --diff-filter=AM "$BEFORE" "$AFTER" -- 'supabase/migrations/*.sql' | sort > files.txt
           fi
           echo "Files to apply:"; cat files.txt
+      - name: Install psql
+        run: sudo apt-get -qq update && sudo apt-get -qq install -y postgresql-client >/dev/null
+      - name: Run the database tests first (throw-away database)
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/tests/run.sh
+      - name: Try the changes first (rolled back) and compare the Sheet check
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ ! -s files.txt ]; then echo "Nothing to try."; exit 0; fi
+          if ! psql "$DB_URL" -X -tAc "select to_regprocedure('public.sheet_check()') is not null" | grep -q t; then
+            echo "Sheet check not installed yet: skipping the dry run."; exit 0
+          fi
+          # a new enum value can't be used in the same transaction: those files are only applied for real
+          if xargs grep -il 'add value' < files.txt >/dev/null 2>&1; then echo "Contains a new enum value: skipping the dry run."; exit 0; fi
+          xargs supabase/check/dry-run.sh < files.txt
       - name: Apply
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          sudo apt-get -qq update && sudo apt-get -qq install -y postgresql-client >/dev/null
           while read -r f; do
             [ -f "$f" ] || { echo "::error::No such file: $f"; exit 1; }
             case "$f" in supabase/migrations/*.sql) ;; *) echo "::error::Only migration files can be applied"; exit 1;; esac
             echo "== $f"
             psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -f "$f"
           done < files.txt
+      - name: Sheet check after the change (counts only)
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if psql "$DB_URL" -X -tAc "select to_regprocedure('public.sheet_check()') is not null" | grep -q t; then
+            psql "$DB_URL" -X -f supabase/check/counts.sql
+          fi

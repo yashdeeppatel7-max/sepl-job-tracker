@@ -22,6 +22,7 @@ export default function More() {
       <Card style={{ padding: 0 }}>
         {perms.importExcel && <Item icon="cloud-upload-outline" label="Import POs from Excel" onPress={() => router.push('/import')} />}
         {perms.manageJobs && <Item icon="add-circle-outline" label="New job / PO" onPress={() => router.push('/job/new')} />}
+        {perms.manageJobs && <Item icon="checkmark-done-outline" label="Sheet check (sheet vs app)" onPress={() => router.push('/sheet-check')} />}
         {perms.manageUsers && <Item icon="people-outline" label="Users & roles" onPress={() => router.push('/users')} />}
         <Item icon="key-outline" label="Change password" onPress={() => router.push('/password')} />
         <Item icon="log-out-outline" label="Sign out" onPress={signOut} danger last />
