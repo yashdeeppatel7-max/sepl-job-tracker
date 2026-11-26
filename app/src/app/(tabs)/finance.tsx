@@ -10,7 +10,7 @@ import { useQuery } from '../../lib/useQuery';
 import { colors, space } from '../../theme';
 import { notify } from '../../lib/notify';
 
-type View_ = 'unpaid' | 'paid' | 'all' | 'bills';
+type View_ = 'unpaid' | 'customers' | 'paid' | 'all' | 'bills';
 
 export default function Finance() {
   const { perms } = useAuth();
@@ -32,6 +32,19 @@ export default function Finance() {
   const invoices = (data?.invoices ?? []).filter((i) =>
     (view === 'all' || (view === 'paid' ? i.payment_status === 'paid' : i.payment_status !== 'paid')) &&
     (!term || [i.invoice_no, i.job_no, i.customer_code].some((v) => v?.toLowerCase().includes(term))));
+  // outstanding per customer, biggest first (to tick off against the books)
+  const byCustomer = useMemo(() => {
+    const m = new Map<string, { code: string; due: number; n: number; missing: number }>();
+    for (const i of data?.invoices ?? []) {
+      if (i.payment_status === 'paid' || i.is_credit_note) continue;
+      const code = i.customer_code ?? '—';
+      const g = m.get(code) ?? { code, due: 0, n: 0, missing: 0 };
+      g.due += invoiceBalance(i); g.n += 1; if (i.amount == null) g.missing += 1;
+      m.set(code, g);
+    }
+    return [...m.values()].filter((g) => !term || g.code.toLowerCase().includes(term)).sort((a, b) => b.due - a.due);
+  }, [data, term]);
+  const shownDue = term && view !== 'bills' ? invoices.reduce((s, i) => s + invoiceBalance(i), 0) : totals.outstanding;
   const bills = (data?.bills ?? []).filter((b) => !term || [b.bill_no, b.vendors?.name, b.jobs?.job_no].some((v) => v?.toLowerCase().includes(term)));
 
   if (!perms.seeMoney) return <Empty text="Finance is not available for your role." />;
@@ -47,16 +60,30 @@ export default function Finance() {
       }} />
       <View style={{ padding: space.md, gap: space.sm }}>
         <View style={{ flexDirection: 'row', gap: space.sm }}>
-          <Stat label="To receive from customers" value={moneyShort(totals.outstanding)} />
+          <Stat label={term && view !== 'bills' && view !== 'customers' ? 'To receive (this search)' : 'To receive from customers'} value={moneyShort(term && view !== 'customers' ? shownDue : totals.outstanding)} />
           <Stat label="To pay vendors" value={moneyShort(totals.billsDue)} />
         </View>
         <TextInput value={q} onChangeText={setQ} placeholder="Search invoice, job, customer, vendor" placeholderTextColor={colors.textFaint} style={styles.search} />
         <Chips<View_> value={view} onChange={setView} options={[
-          { value: 'unpaid', label: 'Unpaid invoices' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All invoices' }, { value: 'bills', label: 'Vendor bills' },
+          { value: 'unpaid', label: 'Unpaid invoices' }, { value: 'customers', label: 'By customer' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All invoices' }, { value: 'bills', label: 'Vendor bills' },
         ]} />
       </View>
       {error && <View style={{ paddingHorizontal: space.md }}><ErrorBox message={error} /></View>}
-      {loading && !data ? <Loading /> : view === 'bills' ? (
+      {loading && !data ? <Loading /> : view === 'customers' ? (
+        <FlatList data={byCustomer} keyExtractor={(g) => g.code}
+          contentContainerStyle={{ padding: space.md, paddingTop: 0, gap: space.sm }}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
+          ListEmptyComponent={<Empty text="Nothing to receive." />}
+          renderItem={({ item: g }) => (
+            <Card onPress={() => { setQ(g.code); setView('unpaid'); }}>
+              <View style={styles.head}>
+                <Text style={{ fontWeight: '700', color: colors.text, flex: 1 }}>{g.code}</Text>
+                <Text style={{ fontWeight: '700', color: colors.text }}>{money(g.due)}</Text>
+              </View>
+              <Muted>{g.n} unpaid invoice{g.n === 1 ? '' : 's'}{g.missing ? `  ·  ${g.missing} with no amount (not counted)` : ''}</Muted>
+            </Card>
+          )} />
+      ) : view === 'bills' ? (
         <FlatList data={bills} keyExtractor={(b) => b.id}
           contentContainerStyle={{ padding: space.md, paddingTop: 0, gap: space.sm }}
           refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
